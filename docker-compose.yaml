@@ -12,8 +12,6 @@ services:
     build:
       context: .
       dockerfile: backend.Dockerfile
-    ports:
-      - 7263:5000
     volumes:
       - ./demo/data/:/data/:rw
     environment:

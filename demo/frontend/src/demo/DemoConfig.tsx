@@ -33,7 +33,7 @@ export const BLOG_URL = 'http://ai.meta.com/blog/sam2';
 
 // Route API calls through same-origin paths to avoid CORS/private network issues
 export const VIDEO_API_ENDPOINT = '/video';
-export const INFERENCE_API_ENDPOINT = '/graphql';
+export const INFERENCE_API_ENDPOINT = '';
 
 
 export const demoObjectLimit = 3;

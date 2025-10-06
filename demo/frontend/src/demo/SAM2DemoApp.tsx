@@ -28,7 +28,7 @@ export default function DemoAppWrapper() {
   const {settings} = useSettingsContext();
   return (
     <RelayEnvironmentProvider
-      endpoint={settings.videoAPIEndpoint}
+      endpoint={settings.inferenceAPIEndpoint}
       suspenseFallback={<DemoSuspenseFallback />}
       errorFallback={DemoErrorFallback}>
       <DemoApp />
