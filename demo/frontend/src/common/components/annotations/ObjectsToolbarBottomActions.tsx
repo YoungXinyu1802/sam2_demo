@@ -15,6 +15,7 @@
  */
 import ClearAllPointsInVideoButton from '@/common/components/annotations/ClearAllPointsInVideoButton';
 import CloseSessionButton from '@/common/components/annotations/CloseSessionButton';
+import FrameTrackingButton from '@/common/components/button/FrameTrackingButton';
 import TrackAndPlayButton from '@/common/components/button/TrackAndPlayButton';
 import ToolbarBottomActionsWrapper from '@/common/components/toolbar/ToolbarBottomActionsWrapper';
 import {
@@ -31,8 +32,10 @@ type Props = {
 export default function ObjectsToolbarBottomActions({onTabChange}: Props) {
   const streamingState = useAtomValue(streamingStateAtom);
 
-  const isTrackingEnabled =
+  const isTrackingInProgress =
     streamingState !== 'none' && streamingState !== 'full';
+
+  const isTrackingComplete = streamingState === 'full';
 
   function handleSwitchToEffectsTab() {
     onTabChange(EFFECT_TOOLBAR_INDEX);
@@ -43,8 +46,14 @@ export default function ObjectsToolbarBottomActions({onTabChange}: Props) {
       <ClearAllPointsInVideoButton
         onRestart={() => onTabChange(OBJECT_TOOLBAR_INDEX)}
       />
-      {isTrackingEnabled && <TrackAndPlayButton />}
-      {streamingState === 'full' && (
+      {/* Show both buttons when tracking is in progress OR when objects are available */}
+      {(isTrackingInProgress || streamingState !== 'none') && (
+        <>
+          {isTrackingInProgress && <TrackAndPlayButton />}
+          <FrameTrackingButton />
+        </>
+      )}
+      {isTrackingComplete && (
         <CloseSessionButton onSessionClose={handleSwitchToEffectsTab} />
       )}
     </ToolbarBottomActionsWrapper>

@@ -122,6 +122,8 @@ export type VideoRef = {
   deleteTracklet(trackletId: number): Promise<void>;
   updatePoints(trackletId: number, points: SegmentationPoint[]): void;
   clearPointsInVideo(): Promise<boolean>;
+  enableFrameTracking(): void;
+  disableFrameTracking(): void;
   getWorker_ONLY_USE_WITH_CAUTION(): Worker;
 };
 
@@ -249,6 +251,12 @@ export default forwardRef<VideoRef, Props>(function Video(
       },
       clearPointsInVideo(): Promise<boolean> {
         return bridge.clearPointsInVideo();
+      },
+      enableFrameTracking(): void {
+        bridge.enableFrameTracking();
+      },
+      disableFrameTracking(): void {
+        bridge.disableFrameTracking();
       },
       getWorker_ONLY_USE_WITH_CAUTION() {
         return bridge.getWorker_ONLY_USE_WITH_CAUTION();

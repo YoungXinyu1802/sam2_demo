@@ -104,6 +104,8 @@ export default class VideoWorkerContext {
   private _canvasBackground: OffscreenCanvas | null = null;
   private _allowAnimation: boolean = false;
   private _currentSegmetationPoint: EffectActionPoint | null = null;
+  private _frameTrackingEnabled: boolean = false;
+  private _onFrameCallback: ((frameIndex: number) => void) | null = null;
 
   private _effects: Effect[];
   private _tracklets: Tracklet[] = [];
@@ -254,6 +256,12 @@ export default class VideoWorkerContext {
       if (this._frameIndex !== expectedFrame && !this._isDrawing) {
         // Update to the next expected frame
         this.updateFrameIndex(expectedFrame);
+        
+        // Call frame tracking callback if enabled
+        if (this._frameTrackingEnabled && this._onFrameCallback) {
+          this._onFrameCallback(expectedFrame);
+        }
+        
         this._drawFrame();
       }
 
@@ -501,6 +509,14 @@ export default class VideoWorkerContext {
 
   public clearMasks(): void {
     this._tracklets = [];
+  }
+
+  public enableFrameTracking(enabled: boolean): void {
+    this._frameTrackingEnabled = enabled;
+  }
+
+  public setOnFrameCallback(callback: ((frameIndex: number) => void) | null): void {
+    this._onFrameCallback = callback;
   }
 
   // PRIVATE FUNCTIONS

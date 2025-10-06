@@ -28,6 +28,7 @@ from inference.data_types import (
     PropagateDataResponse,
     PropagateDataValue,
     PropagateInVideoRequest,
+    PropagateToFrameRequest,
     RemoveObjectRequest,
     RemoveObjectResponse,
     StartSessionRequest,
@@ -360,6 +361,43 @@ class InferenceAPI:
         session = self.__get_session(request.session_id)
         session["canceled"] = True
         return CancelPorpagateResponse(success=True)
+
+    def propagate_to_frame(
+        self, request: PropagateToFrameRequest
+    ) -> PropagateDataResponse:
+        """
+        Propagate tracking to a specific frame. This is used for frame-by-frame tracking.
+        """
+        with self.autocast_context(), self.inference_lock:
+            session_id = request.session_id
+            frame_idx = request.frame_index
+            
+            logger.info(
+                f"propagate to frame {frame_idx} in session {session_id}"
+            )
+            
+            session = self.__get_session(session_id)
+            inference_state = session["state"]
+            
+            try:
+                frame_idx, obj_ids, video_res_masks = self.predictor.propagate_to_frame(
+                    inference_state=inference_state,
+                    frame_idx=frame_idx,
+                )
+                
+                masks_binary = (video_res_masks > self.score_thresh)[:, 0].cpu().numpy()
+                
+                rle_mask_list = self.__get_rle_mask_list(
+                    object_ids=obj_ids, masks=masks_binary
+                )
+                
+                return PropagateDataResponse(
+                    frame_index=frame_idx,
+                    results=rle_mask_list,
+                )
+            except Exception as e:
+                logger.error(f"Error propagating to frame {frame_idx}: {e}")
+                raise
 
     def __get_rle_mask_list(
         self, object_ids: List[int], masks: np.ndarray

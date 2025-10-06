@@ -122,6 +122,14 @@ class CancelPropagateInVideoRequest(BaseRequest):
 
 @dataclass_json
 @dataclass
+class PropagateToFrameRequest(BaseRequest):
+    type: str
+    session_id: str
+    frame_index: int
+
+
+@dataclass_json
+@dataclass
 class StartSessionResponse:
     session_id: str
 

@@ -34,6 +34,8 @@ export interface MessagesEventMap {
   trackAndPlayClick: MessageEvent;
   trackAndPlayComplete: MessageEvent;
   trackAndPlayThrottlingWarning: MessageEvent;
+  frameTrackingEnabled: MessageEvent;
+  frameTrackingDisabled: MessageEvent;
   effectsMessage: MessageEvent;
 }
 
@@ -73,8 +75,18 @@ export const defaultMessageMap: MessagesEventMap = {
     shown: false,
     options: {repeat: true},
   },
+  frameTrackingEnabled: {
+    text: 'Frame-by-frame tracking enabled! Now use the ▶ Play button below to track objects as the video plays. Pause anytime to stop tracking.',
+    shown: false,
+    options: {expire: true, repeat: false, duration: 5000},
+  },
+  frameTrackingDisabled: {
+    text: 'Frame-by-frame tracking disabled.',
+    shown: false,
+    options: {expire: true, repeat: false, duration: 3000},
+  },
   effectsMessage: {
-    text: 'Tip: If you aren’t sure where to get started, click “Surprise Me” to apply a surprise effect to your video.',
+    text: "Tip: If you aren't sure where to get started, click \"Surprise Me\" to apply a surprise effect to your video.",
     shown: false,
     options: {expire: false, repeat: false},
   },

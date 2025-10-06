@@ -31,6 +31,16 @@ let tracker: Tracker | null = null;
 
 let statsEnabled = false;
 
+// Set up frame tracking callback
+context.setOnFrameCallback((frameIndex: number) => {
+  if (tracker) {
+    // Track the frame asynchronously (fire and forget)
+    tracker.trackFrame(frameIndex).catch(error => {
+      console.error('Error tracking frame:', error);
+    });
+  }
+});
+
 self.addEventListener(
   'message',
   async (
@@ -134,6 +144,17 @@ self.addEventListener(
         }
         case 'abortStreamMasks':
           tracker?.abortStreamMasks();
+          break;
+        case 'trackFrame': {
+          const {frameIndex} = event.data;
+          await tracker?.trackFrame(frameIndex);
+          break;
+        }
+        case 'enableFrameTracking':
+          tracker?.enableFrameTracking();
+          break;
+        case 'disableFrameTracking':
+          tracker?.disableFrameTracking();
           break;
       }
     } catch (error) {

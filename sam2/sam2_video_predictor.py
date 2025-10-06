@@ -972,6 +972,102 @@ class SAM2VideoPredictor(SAM2Base):
             for t in range(frame_idx_begin, frame_idx_end + 1):
                 non_cond_frame_outputs.pop(t, None)
 
+    @torch.inference_mode()
+    def propagate_to_frame(
+        self,
+        inference_state,
+        frame_idx,
+    ):
+        """
+        Propagate the tracking to a specific frame. This is useful for frame-by-frame
+        tracking controlled by video playback. Returns the masks for the specified frame.
+        """
+        # First, ensure we have consolidated outputs before tracking
+        self.propagate_in_video_preflight(inference_state)
+        
+        obj_ids = inference_state["obj_ids"]
+        batch_size = self._get_obj_num(inference_state)
+        
+        if batch_size == 0:
+            raise RuntimeError(
+                "No input points or masks are provided for any object; please add inputs first."
+            )
+        
+        # Check if this frame has already been tracked
+        obj_output_dict = inference_state["output_dict_per_obj"][0]
+        already_tracked = frame_idx in obj_output_dict["cond_frame_outputs"] or \
+                         frame_idx in obj_output_dict["non_cond_frame_outputs"]
+        
+        if already_tracked:
+            # Return cached result
+            pred_masks_per_obj = []
+            for obj_idx in range(batch_size):
+                obj_output_dict = inference_state["output_dict_per_obj"][obj_idx]
+                if frame_idx in obj_output_dict["cond_frame_outputs"]:
+                    current_out = obj_output_dict["cond_frame_outputs"][frame_idx]
+                else:
+                    current_out = obj_output_dict["non_cond_frame_outputs"][frame_idx]
+                pred_masks = current_out["pred_masks"].to(inference_state["device"], non_blocking=True)
+                pred_masks_per_obj.append(pred_masks)
+        else:
+            # Need to track this frame
+            pred_masks_per_obj = []
+            
+            # Determine the direction: track forward or backward from nearest tracked frame
+            # Find the nearest tracked frame
+            tracked_frames = set()
+            for obj_idx in range(batch_size):
+                obj_frames_tracked = inference_state["frames_tracked_per_obj"][obj_idx]
+                tracked_frames.update(obj_frames_tracked.keys())
+            
+            if not tracked_frames:
+                # No frames tracked yet, start from conditioning frame
+                reverse = False
+            else:
+                # Find nearest tracked frame
+                nearest_frame = min(tracked_frames, key=lambda x: abs(x - frame_idx))
+                reverse = frame_idx < nearest_frame
+            
+            for obj_idx in range(batch_size):
+                obj_output_dict = inference_state["output_dict_per_obj"][obj_idx]
+                
+                # Check if frame is a conditioning frame
+                if frame_idx in obj_output_dict["cond_frame_outputs"]:
+                    storage_key = "cond_frame_outputs"
+                    current_out = obj_output_dict[storage_key][frame_idx]
+                    device = inference_state["device"]
+                    pred_masks = current_out["pred_masks"].to(device, non_blocking=True)
+                else:
+                    storage_key = "non_cond_frame_outputs"
+                    current_out, pred_masks = self._run_single_frame_inference(
+                        inference_state=inference_state,
+                        output_dict=obj_output_dict,
+                        frame_idx=frame_idx,
+                        batch_size=1,
+                        is_init_cond_frame=False,
+                        point_inputs=None,
+                        mask_inputs=None,
+                        reverse=reverse,
+                        run_mem_encoder=True,
+                    )
+                    obj_output_dict[storage_key][frame_idx] = current_out
+                
+                inference_state["frames_tracked_per_obj"][obj_idx][frame_idx] = {
+                    "reverse": reverse
+                }
+                pred_masks_per_obj.append(pred_masks)
+        
+        # Resize output masks to original video resolution
+        if len(pred_masks_per_obj) > 1:
+            all_pred_masks = torch.cat(pred_masks_per_obj, dim=0)
+        else:
+            all_pred_masks = pred_masks_per_obj[0]
+        _, video_res_masks = self._get_orig_video_res_output(
+            inference_state, all_pred_masks
+        )
+        
+        return frame_idx, obj_ids, video_res_masks
+
 
 class SAM2VideoPredictorVOS(SAM2VideoPredictor):
     """Optimized for the VOS setting"""

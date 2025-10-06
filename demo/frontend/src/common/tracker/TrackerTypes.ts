@@ -83,6 +83,14 @@ export type StreamMasksRequest = Request<
   }
 >;
 export type AbortStreamMasksRequest = Request<'abortStreamMasks', unknown>;
+export type TrackFrameRequest = Request<
+  'trackFrame',
+  {
+    frameIndex: number;
+  }
+>;
+export type EnableFrameTrackingRequest = Request<'enableFrameTracking', unknown>;
+export type DisableFrameTrackingRequest = Request<'disableFrameTracking', unknown>;
 
 export type LogAnnotationsRequest = Request<'logAnnotations', unknown>;
 
@@ -97,6 +105,9 @@ export type TrackerRequest =
   | ClearPointsInVideoRequest
   | StreamMasksRequest
   | AbortStreamMasksRequest
+  | TrackFrameRequest
+  | EnableFrameTrackingRequest
+  | DisableFrameTrackingRequest
   | LogAnnotationsRequest;
 
 export type TrackerRequestMessageEvent = MessageEvent<TrackerRequest>;

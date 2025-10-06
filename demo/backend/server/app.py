@@ -19,7 +19,7 @@ from data.schema import schema
 from data.store import set_videos
 from flask import Flask, make_response, Request, request, Response, send_from_directory
 from flask_cors import CORS
-from inference.data_types import PropagateDataResponse, PropagateInVideoRequest
+from inference.data_types import PropagateDataResponse, PropagateInVideoRequest, PropagateToFrameRequest
 from inference.multipart import MultipartResponseBuilder
 from inference.predictor import InferenceAPI
 from strawberry.flask.views import GraphQLView
@@ -85,6 +85,20 @@ def propagate_in_video() -> Response:
     boundary = "frame"
     frame = gen_track_with_mask_stream(boundary, **args)
     return Response(frame, mimetype="multipart/x-savi-stream; boundary=" + boundary)
+
+
+# TOOD: Protect route with ToS permission check
+@app.route("/propagate_to_frame", methods=["POST"])
+def propagate_to_frame() -> Response:
+    data = request.json
+    req = PropagateToFrameRequest(
+        type="propagate_to_frame",
+        session_id=data["session_id"],
+        frame_index=data["frame_index"],
+    )
+    
+    response = inference_api.propagate_to_frame(request=req)
+    return make_response(response.to_json(), 200)
 
 
 def gen_track_with_mask_stream(

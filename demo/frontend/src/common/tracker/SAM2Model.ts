@@ -20,7 +20,6 @@ import {
   SAM2ModelAddNewPointsMutation,
   SAM2ModelAddNewPointsMutation$data,
 } from '@/common/tracker/__generated__/SAM2ModelAddNewPointsMutation.graphql';
-import {SAM2ModelCancelPropagateInVideoMutation} from '@/common/tracker/__generated__/SAM2ModelCancelPropagateInVideoMutation.graphql';
 import {SAM2ModelClearPointsInFrameMutation} from '@/common/tracker/__generated__/SAM2ModelClearPointsInFrameMutation.graphql';
 import {SAM2ModelClearPointsInVideoMutation} from '@/common/tracker/__generated__/SAM2ModelClearPointsInVideoMutation.graphql';
 import {SAM2ModelCloseSessionMutation} from '@/common/tracker/__generated__/SAM2ModelCloseSessionMutation.graphql';
@@ -92,6 +91,7 @@ export class SAM2Model extends Tracker {
     tracklets: {},
   };
   private _streamingState: StreamingState = 'none';
+  private _frameTrackingEnabled: boolean = false;
 
   private _emptyMask: RLEObject | null = null;
 
@@ -444,7 +444,8 @@ export class SAM2Model extends Tracker {
       return Promise.reject('No active session');
     }
 
-    // Mark session needing propagation when point is set
+    // Disable frame tracking and mark session needing propagation
+    this.disableFrameTracking();
     this._updateStreamingState('none');
 
     return new Promise(resolve => {
@@ -522,8 +523,6 @@ export class SAM2Model extends Tracker {
       for await (const result of generator) {
         if ('aborted' in result) {
           this._updateStreamingState('aborting');
-          await this._abortRequest();
-          this._updateStreamingState('aborted');
           isAborted = true;
         } else {
           await this._updateTrackletMasks(result, false);
@@ -546,6 +545,82 @@ export class SAM2Model extends Tracker {
   public abortStreamMasks() {
     this.abortController?.abort();
     this._sendResponse<StreamingCompletedResponse>('streamingCompleted');
+  }
+
+  public async trackFrame(frameIndex: number): Promise<void> {
+    const sessionId = this._session.id;
+    if (sessionId === null) {
+      return;
+    }
+    
+    // Check if we have any tracklets initialized
+    const hasInitializedTracklets = Object.values(this._session.tracklets).some(
+      tracklet => tracklet.isInitialized
+    );
+    if (!hasInitializedTracklets) {
+      return; // Nothing to track yet
+    }
+    
+    // Only track if frame tracking is enabled
+    if (!this._context || !this._frameTrackingEnabled) {
+      return;
+    }
+    
+    try {
+      const url = `${this._endpoint}/propagate_to_frame`;
+      const requestBody = {
+        session_id: sessionId,
+        frame_index: frameIndex,
+      };
+      
+      const headers: {[name: string]: string} = {
+        'Content-Type': 'application/json',
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+        headers,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        Logger.error(`Failed to track frame ${frameIndex}: ${errorText}`);
+        return; // Don't throw, just log and continue
+      }
+      
+      const jsonResponse = await response.json();
+      const maskResults = jsonResponse.results;
+      const rleMaskList = maskResults.map(
+        (mask: {object_id: number; mask: RLEObject}) => {
+          return {
+            objectId: mask.object_id,
+            rleMask: mask.mask,
+          };
+        },
+      );
+      
+      const result = {
+        frameIndex: jsonResponse.frame_index,
+        rleMaskList,
+      };
+      
+      await this._updateTrackletMasks(result, false);
+    } catch (error) {
+      Logger.error(`Error tracking frame ${frameIndex}:`, error);
+      // Don't throw, just log the error to avoid breaking video playback
+    }
+  }
+
+  public enableFrameTracking(): void {
+    this._frameTrackingEnabled = true;
+    this._context.enableFrameTracking(true);
+    this._updateStreamingState('full');
+  }
+
+  public disableFrameTracking(): void {
+    this._frameTrackingEnabled = false;
+    this._context.enableFrameTracking(false);
   }
 
   public enableStats(): void {
@@ -788,48 +863,5 @@ export class SAM2Model extends Tracker {
         };
       }
     }
-  }
-
-  private async _abortRequest(): Promise<void> {
-    const sessionId = this._session.id;
-    invariant(sessionId != null, 'session id cannot be empty');
-    return new Promise((resolve, reject) => {
-      try {
-        commitMutation<SAM2ModelCancelPropagateInVideoMutation>(
-          this._environment,
-          {
-            mutation: graphql`
-              mutation SAM2ModelCancelPropagateInVideoMutation(
-                $input: CancelPropagateInVideoInput!
-              ) {
-                cancelPropagateInVideo(input: $input) {
-                  success
-                }
-              }
-            `,
-            variables: {
-              input: {
-                sessionId,
-              },
-            },
-            onCompleted: response => {
-              const {success} = response.cancelPropagateInVideo;
-              if (!success) {
-                reject(`could not abort session ${sessionId}`);
-                return;
-              }
-              resolve();
-            },
-            onError: error => {
-              Logger.error(error);
-              reject(error);
-            },
-          },
-        );
-      } catch (error) {
-        Logger.error(error);
-        reject(error);
-      }
-    });
   }
 }

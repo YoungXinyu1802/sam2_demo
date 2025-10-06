@@ -29,6 +29,8 @@ import {
   CloseSessionRequest,
   CreateTrackletRequest,
   DeleteTrackletRequest,
+  DisableFrameTrackingRequest,
+  EnableFrameTrackingRequest,
   InitializeTrackerRequest,
   LogAnnotationsRequest,
   SessionStartFailedResponse,
@@ -36,6 +38,7 @@ import {
   StartSessionRequest,
   StreamMasksRequest,
   StreamingStateUpdateResponse,
+  TrackFrameRequest,
   TrackerRequest,
   TrackerResponseMessageEvent,
   TrackletCreatedResponse,
@@ -465,6 +468,20 @@ export default class VideoWorkerBridge extends EventEmitter<VideoWorkerEventMap>
       this.worker.addEventListener('message', handleAbortResponse);
       this.sendRequest<AbortStreamMasksRequest>('abortStreamMasks');
     });
+  }
+
+  trackFrame(frameIndex: number): void {
+    this.sendRequest<TrackFrameRequest>('trackFrame', {
+      frameIndex,
+    });
+  }
+
+  enableFrameTracking(): void {
+    this.sendRequest<EnableFrameTrackingRequest>('enableFrameTracking');
+  }
+
+  disableFrameTracking(): void {
+    this.sendRequest<DisableFrameTrackingRequest>('disableFrameTracking');
   }
 
   getWorker_ONLY_USE_WITH_CAUTION(): Worker {
