@@ -76,9 +76,9 @@ export const defaultMessageMap: MessagesEventMap = {
     options: {repeat: true},
   },
   frameTrackingEnabled: {
-    text: 'Frame-by-frame tracking enabled! Now use the ▶ Play button below to track objects as the video plays. Pause anytime to stop tracking.',
+    text: 'Frame-by-frame tracking enabled! Use the ▶ Play button to track as the video plays. Pause anytime to add correction clicks, then play to continue tracking.',
     shown: false,
-    options: {expire: true, repeat: false, duration: 5000},
+    options: {expire: true, repeat: false, duration: 6000},
   },
   frameTrackingDisabled: {
     text: 'Frame-by-frame tracking disabled.',

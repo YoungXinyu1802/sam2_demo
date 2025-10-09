@@ -329,7 +329,10 @@ export class SAM2Model extends Tracker {
     );
 
     // Mark session needing propagation when point is set
-    this._updateStreamingState('required');
+    // If frame tracking is enabled, keep state as 'full' to allow continuing playback
+    if (!this._frameTrackingEnabled) {
+      this._updateStreamingState('required');
+    }
 
     // Clear all points in frame if no points are provided.
     if (points.length === 0) {
