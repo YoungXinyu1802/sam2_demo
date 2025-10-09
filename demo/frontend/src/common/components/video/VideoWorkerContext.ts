@@ -105,7 +105,7 @@ export default class VideoWorkerContext {
   private _allowAnimation: boolean = false;
   private _currentSegmetationPoint: EffectActionPoint | null = null;
   private _frameTrackingEnabled: boolean = false;
-  private _onFrameCallback: ((frameIndex: number) => void) | null = null;
+  private _onFrameCallback: ((frameIndex: number) => Promise<void>) | null = null;
 
   private _effects: Effect[];
   private _tracklets: Tracklet[] = [];
@@ -242,7 +242,7 @@ export default class VideoWorkerContext {
     // does not start at frame index 0.
     const offsetFrameIndex = this._frameIndex;
 
-    const updateFrame = (time: number) => {
+    const updateFrame = async (time: number) => {
       if (startTime === null) {
         startTime = time;
       }
@@ -257,9 +257,16 @@ export default class VideoWorkerContext {
         // Update to the next expected frame
         this.updateFrameIndex(expectedFrame);
         
-        // Call frame tracking callback if enabled
+        // Call frame tracking callback if enabled and wait for it to complete
         if (this._frameTrackingEnabled && this._onFrameCallback) {
-          this._onFrameCallback(expectedFrame);
+          await this._onFrameCallback(expectedFrame);
+        }
+        
+        // Check if we're still playing after the async tracking completes
+        // If paused, don't draw the frame or schedule the next update
+        if (!this._isPlaying) {
+          this._stats.fps?.end();
+          return;
         }
         
         this._drawFrame();
@@ -515,7 +522,7 @@ export default class VideoWorkerContext {
     this._frameTrackingEnabled = enabled;
   }
 
-  public setOnFrameCallback(callback: ((frameIndex: number) => void) | null): void {
+  public setOnFrameCallback(callback: ((frameIndex: number) => Promise<void>) | null): void {
     this._onFrameCallback = callback;
   }
 

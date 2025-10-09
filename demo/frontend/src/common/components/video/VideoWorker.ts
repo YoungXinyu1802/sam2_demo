@@ -32,12 +32,10 @@ let tracker: Tracker | null = null;
 let statsEnabled = false;
 
 // Set up frame tracking callback
-context.setOnFrameCallback((frameIndex: number) => {
+context.setOnFrameCallback(async (frameIndex: number) => {
   if (tracker) {
-    // Track the frame asynchronously (fire and forget)
-    tracker.trackFrame(frameIndex).catch(error => {
-      console.error('Error tracking frame:', error);
-    });
+    // Track the frame and wait for it to complete to keep masks in sync with video
+    await tracker.trackFrame(frameIndex);
   }
 });
 

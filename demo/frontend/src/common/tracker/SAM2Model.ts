@@ -605,7 +605,8 @@ export class SAM2Model extends Tracker {
         rleMaskList,
       };
       
-      await this._updateTrackletMasks(result, false);
+      // Pass false for shouldGoToFrame to avoid disrupting the playback loop
+      await this._updateTrackletMasks(result, false, false);
     } catch (error) {
       Logger.error(`Error tracking frame ${frameIndex}:`, error);
       // Don't throw, just log the error to avoid breaking video playback
