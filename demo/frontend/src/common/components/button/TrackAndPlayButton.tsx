@@ -16,6 +16,7 @@
 import PrimaryCTAButton from '@/common/components/button/PrimaryCTAButton';
 import useMessagesSnackbar from '@/common/components/snackbar/useDemoMessagesSnackbar';
 import useFunctionThrottle from '@/common/components/useFunctionThrottle';
+import {behaviorTracker} from '@/common/utils/BehaviorTracker';
 import useVideo from '@/common/components/video/editor/useVideo';
 import {
   areTrackletObjectsInitializedAtom,
@@ -73,6 +74,7 @@ export default function TrackAndPlayButton() {
       () => {
         if (!isStreaming) {
           enqueueMessage('trackAndPlayClick');
+          behaviorTracker.logTrackingEvent('track_objects');
           video?.streamMasks();
           setSession(previousSession =>
             previousSession == null

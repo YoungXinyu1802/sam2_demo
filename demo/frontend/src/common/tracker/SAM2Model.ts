@@ -631,6 +631,14 @@ export class SAM2Model extends Tracker {
     this._stats = new Stats('ms', 'D', 1000 / 25);
   }
 
+  public logPlayEvent(): void {
+    // No-op: tracking handled in main thread
+  }
+
+  public logPauseEvent(): void {
+    // No-op: tracking handled in main thread
+  }
+
   // PRIVATE
 
   private _cleanup() {

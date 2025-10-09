@@ -75,6 +75,8 @@ export interface ITracker {
   enableFrameTracking(): void;
   disableFrameTracking(): void;
   enableStats(): void;
+  logPlayEvent(): void;
+  logPauseEvent(): void;
 }
 
 export abstract class Tracker implements ITracker {
@@ -102,6 +104,8 @@ export abstract class Tracker implements ITracker {
   abstract enableFrameTracking(): void;
   abstract disableFrameTracking(): void;
   abstract enableStats(): void;
+  abstract logPlayEvent(): void;
+  abstract logPauseEvent(): void;
 
   // PRIVATE FUNCTIONS
 

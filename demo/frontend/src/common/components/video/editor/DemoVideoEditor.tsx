@@ -19,6 +19,7 @@ import MessagesSnackbar from '@/common/components/snackbar/MessagesSnackbar';
 import useMessagesSnackbar from '@/common/components/snackbar/useDemoMessagesSnackbar';
 import {OBJECT_TOOLBAR_INDEX} from '@/common/components/toolbar/ToolbarConfig';
 import useToolbarTabs from '@/common/components/toolbar/useToolbarTabs';
+import {behaviorTracker} from '@/common/utils/BehaviorTracker';
 import VideoFilmstripWithPlayback from '@/common/components/video/VideoFilmstripWithPlayback';
 import {
   FrameUpdateEvent,
@@ -38,6 +39,7 @@ import {SegmentationPoint} from '@/common/tracker/Tracker';
 import {
   activeTrackletObjectIdAtom,
   frameIndexAtom,
+  frameTrackingEnabledAtom,
   isAddObjectEnabledAtom,
   isPlayingAtom,
   isVideoLoadingAtom,
@@ -106,12 +108,14 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
   );
   const setTrackletObjects = useSetAtom(trackletObjectsAtom);
   const setFrameIndex = useSetAtom(frameIndexAtom);
+  const frameIndex = useAtomValue(frameIndexAtom);
   const points = useAtomValue(pointsAtom);
   const isAddObjectEnabled = useAtomValue(isAddObjectEnabledAtom);
   const streamingState = useAtomValue(streamingStateAtom);
   const isPlaying = useAtomValue(isPlayingAtom);
   const isVideoLoading = useAtomValue(isVideoLoadingAtom);
   const uploadingState = useAtomValue(uploadingStateAtom);
+  const frameTrackingEnabled = useAtomValue(frameTrackingEnabledAtom);
 
   const [renderingError, setRenderingError] = useState<ErrorObject | null>(
     null,
@@ -129,6 +133,15 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
     resetEditor();
   }, [inputVideo, resetEditor]);
 
+  // Track play/pause events
+  useEffect(() => {
+    if (isPlaying) {
+      behaviorTracker.logTrackingEvent('play');
+    } else {
+      behaviorTracker.logTrackingEvent('pause');
+    }
+  }, [isPlaying]);
+
   useEffect(() => {
     function onFrameUpdate(event: FrameUpdateEvent) {
       setFrameIndex(event.index);
@@ -140,6 +153,8 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
 
     function onSessionStarted(event: SessionStartedEvent) {
       setSession({id: event.sessionId, ranPropagation: false});
+      // Start behavior tracking for this session
+      behaviorTracker.startSession(event.sessionId, inputVideo.path);
     }
 
     video?.addEventListener('sessionStarted', onSessionStarted);
@@ -213,6 +228,18 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
       await createActiveTracklet();
     }
     enqueueMessage('pointClick');
+    
+    // Log clicks for behavior tracking
+    const objectId = activeTrackletId ?? 0;
+    newPoints.forEach(point => {
+      behaviorTracker.logClick(
+        frameIndex,
+        objectId,
+        [point[0], point[1]],
+        point[2], // label
+        frameTrackingEnabled,
+      );
+    });
   }
 
   async function handleAddPoint(point: SegmentationPoint) {

@@ -15,6 +15,7 @@
  */
 import ClearAllPointsInVideoButton from '@/common/components/annotations/ClearAllPointsInVideoButton';
 import CloseSessionButton from '@/common/components/annotations/CloseSessionButton';
+import ExportBehaviorDataButton from '@/common/components/button/ExportBehaviorDataButton';
 import FrameTrackingButton from '@/common/components/button/FrameTrackingButton';
 import TrackAndPlayButton from '@/common/components/button/TrackAndPlayButton';
 import ToolbarBottomActionsWrapper from '@/common/components/toolbar/ToolbarBottomActionsWrapper';
@@ -54,7 +55,10 @@ export default function ObjectsToolbarBottomActions({onTabChange}: Props) {
         </>
       )}
       {isTrackingComplete && (
-        <CloseSessionButton onSessionClose={handleSwitchToEffectsTab} />
+        <>
+          <ExportBehaviorDataButton />
+          <CloseSessionButton onSessionClose={handleSwitchToEffectsTab} />
+        </>
       )}
     </ToolbarBottomActionsWrapper>
   );

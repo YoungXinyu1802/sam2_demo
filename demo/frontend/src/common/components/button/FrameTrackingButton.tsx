@@ -15,18 +15,25 @@
  */
 import PrimaryCTAButton from '@/common/components/button/PrimaryCTAButton';
 import useMessagesSnackbar from '@/common/components/snackbar/useDemoMessagesSnackbar';
+import {behaviorTracker} from '@/common/utils/BehaviorTracker';
 import useVideo from '@/common/components/video/editor/useVideo';
-import {streamingStateAtom, trackletObjectsAtom} from '@/demo/atoms';
+import {
+  frameTrackingEnabledAtom,
+  streamingStateAtom,
+  trackletObjectsAtom,
+} from '@/demo/atoms';
 import {Renew, Stop} from '@carbon/icons-react';
-import {useAtomValue} from 'jotai';
-import {useCallback, useEffect, useState} from 'react';
+import {useAtom, useAtomValue} from 'jotai';
+import {useCallback, useEffect} from 'react';
 
 export default function FrameTrackingButton() {
   const video = useVideo();
   const {enqueueMessage} = useMessagesSnackbar();
   const streamingState = useAtomValue(streamingStateAtom);
   const tracklets = useAtomValue(trackletObjectsAtom);
-  const [isFrameTrackingEnabled, setIsFrameTrackingEnabled] = useState(false);
+  const [isFrameTrackingEnabled, setIsFrameTrackingEnabled] = useAtom(
+    frameTrackingEnabledAtom,
+  );
 
   const areObjectsInitialized = tracklets.some(
     tracklet => tracklet.isInitialized,
@@ -56,11 +63,13 @@ export default function FrameTrackingButton() {
       enqueueMessage('frameTrackingEnabled');
       video?.enableFrameTracking();
       setIsFrameTrackingEnabled(true);
+      behaviorTracker.logTrackingEvent('enable_frame_tracking');
     } else {
       // Disable frame tracking
       enqueueMessage('frameTrackingDisabled');
       video?.disableFrameTracking();
       setIsFrameTrackingEnabled(false);
+      behaviorTracker.logTrackingEvent('disable_frame_tracking');
     }
   }, [isFrameTrackingEnabled, isDisabled, video, enqueueMessage]);
 

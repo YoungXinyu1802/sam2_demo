@@ -66,6 +66,8 @@ export const isPlayingAtom = atom<boolean>(false);
 
 export const isStreamingAtom = atom<boolean>(false);
 
+export const frameTrackingEnabledAtom = atom<boolean>(false);
+
 // #####################
 // OBJECTS
 // #####################
