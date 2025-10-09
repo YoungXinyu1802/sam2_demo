@@ -30,7 +30,9 @@ import {
   CreateTrackletRequest,
   DeleteTrackletRequest,
   DisableFrameTrackingRequest,
+  DisableLITLoRAModeRequest,
   EnableFrameTrackingRequest,
+  EnableLITLoRAModeRequest,
   InitializeTrackerRequest,
   LogAnnotationsRequest,
   SessionStartFailedResponse,
@@ -482,6 +484,14 @@ export default class VideoWorkerBridge extends EventEmitter<VideoWorkerEventMap>
 
   disableFrameTracking(): void {
     this.sendRequest<DisableFrameTrackingRequest>('disableFrameTracking');
+  }
+
+  enableLITLoRAMode(): void {
+    this.sendRequest<EnableLITLoRAModeRequest>('enableLITLoRAMode');
+  }
+
+  disableLITLoRAMode(): void {
+    this.sendRequest<DisableLITLoRAModeRequest>('disableLITLoRAMode');
   }
 
   getWorker_ONLY_USE_WITH_CAUTION(): Worker {

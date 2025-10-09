@@ -92,6 +92,7 @@ export class SAM2Model extends Tracker {
   };
   private _streamingState: StreamingState = 'none';
   private _frameTrackingEnabled: boolean = false;
+  private _litLoRAModeEnabled: boolean = false;
 
   private _emptyMask: RLEObject | null = null;
 
@@ -373,6 +374,22 @@ export class SAM2Model extends Tracker {
           tracklet.points[frameIndex] = points;
           tracklet.isInitialized = true;
           this._updateTrackletMasks(response.addPoints, true);
+          
+          // If LIT_LoRA mode and frame tracking are enabled, send training data
+          if (this._litLoRAModeEnabled && this._frameTrackingEnabled) {
+            const maskData = response.addPoints.rleMaskList.find(
+              m => m.objectId === objectId
+            );
+            if (maskData?.rleMask) {
+              // Convert readonly array to mutable tuple
+              const rleObject: RLEObject = {
+                size: [maskData.rleMask.size[0], maskData.rleMask.size[1]],
+                counts: maskData.rleMask.counts,
+              };
+              this._sendLoRATrainingData(frameIndex, objectId, rleObject);
+            }
+          }
+          
           resolve();
         },
         onError: error => {
@@ -627,6 +644,16 @@ export class SAM2Model extends Tracker {
     this._context.enableFrameTracking(false);
   }
 
+  public enableLITLoRAMode(): void {
+    this._litLoRAModeEnabled = true;
+    Logger.info('LIT_LoRA mode enabled');
+  }
+
+  public disableLITLoRAMode(): void {
+    this._litLoRAModeEnabled = false;
+    Logger.info('LIT_LoRA mode disabled');
+  }
+
   public enableStats(): void {
     this._stats = new Stats('ms', 'D', 1000 / 25);
   }
@@ -636,10 +663,133 @@ export class SAM2Model extends Tracker {
   }
 
   public logPauseEvent(): void {
-    // No-op: tracking handled in main thread
+    // When video pauses in LIT_LoRA mode, generate mask candidates
+    if (this._litLoRAModeEnabled && this._frameTrackingEnabled) {
+      this._generateLoraCandidates();
+    }
+  }
+
+  private async _generateLoraCandidates(): Promise<void> {
+    const sessionId = this._session.id;
+    if (!sessionId) {
+      Logger.warn('No session ID for LoRA candidate generation');
+      return;
+    }
+
+    try {
+      // Get current frame and active tracklets
+      const frameIndex = this._context.frameIndex;
+      const trackletIds = Object.keys(this._session.tracklets).map(Number);
+
+      // Generate candidates for each tracklet
+      for (const objectId of trackletIds) {
+        const url = `${this._endpoint}/generate_lora_candidates`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            session_id: sessionId,
+            object_id: objectId,
+            frame_index: frameIndex,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        Logger.info('LoRA candidates generated:', result);
+
+        // If we have candidates, update the masks
+        if (result.candidates && result.candidates.length > 0) {
+          const candidate = result.candidates[0]; // Use the first candidate
+          const tracklet = this._session.tracklets[objectId];
+          
+          if (tracklet && candidate.mask) {
+            // Update the tracklet with the LoRA-generated mask
+            const rleObject: RLEObject = {
+              size: candidate.mask.size,
+              counts: candidate.mask.counts,
+            };
+            
+            const decodedMask = decode([rleObject]);
+            const bbox = toBbox([rleObject]);
+            const isEmpty = false;
+
+            const mask: Mask = {
+              data: rleObject,
+              shape: [...decodedMask.shape],
+              bounds: [
+                [bbox[0], bbox[1]],
+                [bbox[0] + bbox[2], bbox[1] + bbox[3]],
+              ],
+              isEmpty,
+            };
+            
+            tracklet.masks[frameIndex] = mask;
+            Logger.info(`Applied LoRA mask for object ${objectId} with confidence ${candidate.confidence}`);
+          }
+        }
+      }
+
+      // Update tracklets to reflect the new masks
+      this._updateTracklets();
+      
+      // Update the context with new masks
+      this._context.updateTracklets(
+        this._context.frameIndex,
+        Object.values(this._session.tracklets),
+        false,
+      );
+    } catch (error) {
+      Logger.error('Failed to generate LoRA candidates:', error);
+    }
   }
 
   // PRIVATE
+
+  private async _sendLoRATrainingData(
+    frameIndex: number,
+    objectId: number,
+    mask: RLEObject,
+  ): Promise<void> {
+    const sessionId = this._session.id;
+    if (!sessionId) {
+      Logger.warn('No session ID for LoRA training data');
+      return;
+    }
+
+    try {
+      const url = `${this._endpoint}/train_lora`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          object_id: objectId,
+          frame_index: frameIndex,
+          mask: {
+            counts: mask.counts,
+            size: mask.size,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      Logger.info('LoRA training data sent:', result);
+    } catch (error) {
+      Logger.error('Failed to send LoRA training data:', error);
+    }
+  }
 
   private _cleanup() {
     this._session.id = null;

@@ -91,6 +91,8 @@ export type TrackFrameRequest = Request<
 >;
 export type EnableFrameTrackingRequest = Request<'enableFrameTracking', unknown>;
 export type DisableFrameTrackingRequest = Request<'disableFrameTracking', unknown>;
+export type EnableLITLoRAModeRequest = Request<'enableLITLoRAMode', unknown>;
+export type DisableLITLoRAModeRequest = Request<'disableLITLoRAMode', unknown>;
 
 export type LogAnnotationsRequest = Request<'logAnnotations', unknown>;
 
@@ -108,6 +110,8 @@ export type TrackerRequest =
   | TrackFrameRequest
   | EnableFrameTrackingRequest
   | DisableFrameTrackingRequest
+  | EnableLITLoRAModeRequest
+  | DisableLITLoRAModeRequest
   | LogAnnotationsRequest;
 
 export type TrackerRequestMessageEvent = MessageEvent<TrackerRequest>;

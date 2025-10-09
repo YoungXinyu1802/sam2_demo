@@ -19,7 +19,13 @@ from data.schema import schema
 from data.store import set_videos
 from flask import Flask, make_response, Request, request, Response, send_from_directory
 from flask_cors import CORS
-from inference.data_types import PropagateDataResponse, PropagateInVideoRequest, PropagateToFrameRequest
+from inference.data_types import (
+    GenerateLoraCandidatesRequest,
+    PropagateDataResponse,
+    PropagateInVideoRequest,
+    PropagateToFrameRequest,
+    TrainLoRARequest,
+)
 from inference.multipart import MultipartResponseBuilder
 from inference.predictor import InferenceAPI
 from strawberry.flask.views import GraphQLView
@@ -99,6 +105,49 @@ def propagate_to_frame() -> Response:
     
     response = inference_api.propagate_to_frame(request=req)
     return make_response(response.to_json(), 200)
+
+
+# TOOD: Protect route with ToS permission check
+@app.route("/train_lora", methods=["POST"])
+def train_lora() -> Response:
+    try:
+        data = request.json
+        logger.info(f"Received train_lora request: session={data.get('session_id')}, obj={data.get('object_id')}, frame={data.get('frame_index')}")
+        from inference.data_types import Mask
+        mask_data = data["mask"]
+        req = TrainLoRARequest(
+            type="train_lora",
+            session_id=data["session_id"],
+            object_id=data["object_id"],
+            frame_index=data["frame_index"],
+            mask=Mask(size=mask_data["size"], counts=mask_data["counts"]),
+        )
+        
+        response = inference_api.train_lora(request=req)
+        return make_response(response.to_json(), 200)
+    except Exception as e:
+        logger.error(f"Error in train_lora: {e}", exc_info=True)
+        return make_response({"error": str(e)}, 500)
+
+
+# TOOD: Protect route with ToS permission check
+@app.route("/generate_lora_candidates", methods=["POST"])
+def generate_lora_candidates() -> Response:
+    try:
+        data = request.json
+        logger.info(f"Received generate_lora_candidates request: {data}")
+        req = GenerateLoraCandidatesRequest(
+            type="generate_lora_candidates",
+            session_id=data["session_id"],
+            object_id=data["object_id"],
+            frame_index=data["frame_index"],
+        )
+        
+        response = inference_api.generate_lora_candidates(request=req)
+        return make_response(response.to_json(), 200)
+    except Exception as e:
+        logger.error(f"Error in generate_lora_candidates: {e}", exc_info=True)
+        return make_response({"error": str(e)}, 500)
 
 
 def gen_track_with_mask_stream(

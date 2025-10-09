@@ -68,6 +68,20 @@ export const isStreamingAtom = atom<boolean>(false);
 
 export const frameTrackingEnabledAtom = atom<boolean>(false);
 
+export const litLoRAModeEnabledAtom = atom<boolean>(false);
+
+export const loraTrainingDataAtom = atom<Array<{
+  frameIndex: number;
+  objectId: number;
+  mask: DataArray;
+}>>([]);
+
+export const loraMaskCandidatesAtom = atom<Array<{
+  objectId: number;
+  mask: DataArray;
+  confidence: number;
+}> | null>(null);
+
 // #####################
 // OBJECTS
 // #####################

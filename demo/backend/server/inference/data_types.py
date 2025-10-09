@@ -130,6 +130,25 @@ class PropagateToFrameRequest(BaseRequest):
 
 @dataclass_json
 @dataclass
+class TrainLoRARequest(BaseRequest):
+    type: str
+    session_id: str
+    object_id: int
+    frame_index: int
+    mask: Mask
+
+
+@dataclass_json
+@dataclass
+class GenerateLoraCandidatesRequest(BaseRequest):
+    type: str
+    session_id: str
+    object_id: int
+    frame_index: int
+
+
+@dataclass_json
+@dataclass
 class StartSessionResponse:
     session_id: str
 
@@ -188,6 +207,28 @@ class RemoveObjectResponse:
 @dataclass
 class CancelPorpagateResponse:
     success: bool
+
+
+@dataclass_json
+@dataclass
+class LoRACandidateValue:
+    mask: Mask
+    confidence: float
+
+
+@dataclass_json
+@dataclass
+class GenerateLoraCandidatesResponse:
+    frame_index: int
+    object_id: int
+    candidates: List[LoRACandidateValue]
+
+
+@dataclass_json
+@dataclass
+class TrainLoRAResponse:
+    success: bool
+    message: str
 
 
 @dataclass_json

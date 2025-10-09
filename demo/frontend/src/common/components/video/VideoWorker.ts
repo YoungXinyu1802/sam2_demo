@@ -156,6 +156,12 @@ self.addEventListener(
         case 'disableFrameTracking':
           tracker?.disableFrameTracking();
           break;
+        case 'enableLITLoRAMode':
+          tracker?.enableLITLoRAMode();
+          break;
+        case 'disableLITLoRAMode':
+          tracker?.disableLITLoRAMode();
+          break;
       }
     } catch (error) {
       const serializedError = serializeError(error);
