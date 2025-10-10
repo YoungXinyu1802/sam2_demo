@@ -445,22 +445,30 @@ class InferenceAPI:
                 # Extract features for this frame and mask
                 # We need to get the embeddings from the predictor
                 with torch.no_grad():
-                    # Get image features
-                    current_out, _, _ = self.predictor._get_image_feature(
-                        inference_state, frame_idx, batch_size=1
-                    )
+                    # Get the cached backbone output directly
+                    device = inference_state["device"]
+                    image = inference_state["images"][frame_idx].to(device).float().unsqueeze(0)
                     
-                    pix_feat = current_out["backbone_fpn"][0]
-                    pix_feat_with_mem = current_out["vision_features"]
-                    image_pe = current_out["vision_pos_enc"][0]
+                    # Check if features are cached
+                    cached_image, backbone_out = inference_state["cached_features"].get(
+                        frame_idx, (None, None)
+                    )
+                    if backbone_out is None:
+                        # Run forward pass if not cached
+                        backbone_out = self.predictor.forward_image(image)
+                    
+                    # Get the features we need for LoRA training
+                    pix_feat_with_mem = backbone_out["backbone_fpn"][0]  # First level features
+                    image_pe = backbone_out["vision_pos_enc"][0]  # Position encoding
                     
                     # Get sparse and dense embeddings from the mask
                     # Convert mask to points for sparse embedding
                     mask_tensor = torch.tensor(mask > 0, dtype=torch.float32, device=self.device)
                     mask_tensor = mask_tensor.unsqueeze(0).unsqueeze(0)
                     
-                    # Resize to match expected size
-                    H, W = inference_state["images"].shape[-2:]
+                    # Resize to match expected size (use video dimensions from inference state)
+                    H = inference_state["video_height"]
+                    W = inference_state["video_width"]
                     mask_resized = F.interpolate(
                         mask_tensor,
                         size=(H, W),
@@ -474,11 +482,8 @@ class InferenceAPI:
                         masks=mask_resized,
                     )
                     
-                    # Get high-res features
-                    high_res_features = [
-                        feat_level[-1].unsqueeze(0)
-                        for feat_level in current_out["backbone_fpn"][1:]
-                    ]
+                    # Get high-res features (list of feature maps at different resolutions)
+                    high_res_features = backbone_out["backbone_fpn"][1:]
                 
                 # Store the training sample
                 training_sample = (
@@ -581,22 +586,27 @@ class InferenceAPI:
                 inference_state = session["state"]
                 
                 with torch.no_grad():
-                    # Get image features for the frame
-                    current_out, _, _ = self.predictor._get_image_feature(
-                        inference_state, frame_idx, batch_size=1
+                    # Get the cached backbone output directly
+                    device = inference_state["device"]
+                    image = inference_state["images"][frame_idx].to(device).float().unsqueeze(0)
+                    
+                    # Check if features are cached
+                    cached_image, backbone_out = inference_state["cached_features"].get(
+                        frame_idx, (None, None)
                     )
+                    if backbone_out is None:
+                        # Run forward pass if not cached
+                        backbone_out = self.predictor.forward_image(image)
                     
-                    pix_feat_with_mem = current_out["vision_features"]
-                    image_pe = current_out["vision_pos_enc"][0]
+                    pix_feat_with_mem = backbone_out["backbone_fpn"][0]  # First level features
+                    image_pe = backbone_out["vision_pos_enc"][0]  # Position encoding
                     
-                    # Get high-res features
-                    high_res_features = [
-                        feat_level[-1].unsqueeze(0)
-                        for feat_level in current_out["backbone_fpn"][1:]
-                    ]
+                    # Get high-res features (list of feature maps at different resolutions)
+                    high_res_features = backbone_out["backbone_fpn"][1:]
                     
                     # Get the GT mask if available (for evaluation)
-                    H, W = inference_state["images"].shape[-2:]
+                    H = inference_state["video_height"]
+                    W = inference_state["video_width"]
                     original_gt_mask = np.zeros((H, W), dtype=np.uint8)
                     
                     # Use empty prompts to get automatic prediction
