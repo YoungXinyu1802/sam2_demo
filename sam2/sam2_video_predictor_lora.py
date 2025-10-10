@@ -11,10 +11,9 @@ import numpy as np
 import random
 import os
 
-from matplotlib import pyplot as plt
-import cv2
+# from matplotlib import pyplot as plt
 from pycocotools import mask as MaskUtils
-import json, cv2, colorsys
+import json
 NO_OBJ_SCORE = -1024
 import time
 

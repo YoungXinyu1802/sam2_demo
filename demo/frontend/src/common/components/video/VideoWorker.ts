@@ -162,6 +162,9 @@ self.addEventListener(
         case 'disableLITLoRAMode':
           tracker?.disableLITLoRAMode();
           break;
+        case 'finishCorrection':
+          tracker?.finishCorrection();
+          break;
       }
     } catch (error) {
       const serializedError = serializeError(error);

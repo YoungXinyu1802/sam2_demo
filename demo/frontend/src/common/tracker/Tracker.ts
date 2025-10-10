@@ -107,6 +107,7 @@ export abstract class Tracker implements ITracker {
   abstract disableFrameTracking(): void;
   abstract enableLITLoRAMode(): void;
   abstract disableLITLoRAMode(): void;
+  abstract finishCorrection(): void;
   abstract enableStats(): void;
   abstract logPlayEvent(): void;
   abstract logPauseEvent(): void;

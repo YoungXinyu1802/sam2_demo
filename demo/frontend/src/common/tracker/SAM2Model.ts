@@ -376,19 +376,8 @@ export class SAM2Model extends Tracker {
           this._updateTrackletMasks(response.addPoints, true);
           
           // If LIT_LoRA mode and frame tracking are enabled, send training data
-          if (this._litLoRAModeEnabled && this._frameTrackingEnabled) {
-            const maskData = response.addPoints.rleMaskList.find(
-              m => m.objectId === objectId
-            );
-            if (maskData?.rleMask) {
-              // Convert readonly array to mutable tuple
-              const rleObject: RLEObject = {
-                size: [maskData.rleMask.size[0], maskData.rleMask.size[1]],
-                counts: maskData.rleMask.counts,
-              };
-              this._sendLoRATrainingData(frameIndex, objectId, rleObject);
-            }
-          }
+          // Note: Training data is now sent manually via finishCorrection()
+          // instead of automatically after each click
           
           resolve();
         },
@@ -652,6 +641,38 @@ export class SAM2Model extends Tracker {
   public disableLITLoRAMode(): void {
     this._litLoRAModeEnabled = false;
     Logger.info('LIT_LoRA mode disabled');
+  }
+
+  public finishCorrection(): void {
+    if (!this._litLoRAModeEnabled || !this._frameTrackingEnabled) {
+      Logger.warn('Cannot finish correction: LIT_LoRA mode or frame tracking not enabled');
+      return;
+    }
+
+    // Send the current frame's masks for all tracklets as training data
+    const frameIndex = this._context.frameIndex;
+    const trackletIds = Object.keys(this._session.tracklets).map(Number);
+
+    for (const objectId of trackletIds) {
+      const tracklet = this._session.tracklets[objectId];
+      if (tracklet && tracklet.isInitialized) {
+        // Get the latest mask for this object at this frame
+        const mask = tracklet.masks[frameIndex];
+        if (mask && mask.data) {
+          // mask.data can be Blob or RLEObject, we need the RLEObject
+          const rleData = mask.data;
+          // Type guard: check if it's an RLEObject (has size and counts properties)
+          if ('size' in rleData && 'counts' in rleData) {
+            const rleObject: RLEObject = {
+              size: rleData.size as [number, number],
+              counts: rleData.counts,
+            };
+            this._sendLoRATrainingData(frameIndex, objectId, rleObject);
+            Logger.info(`Sent training data for object ${objectId} at frame ${frameIndex}`);
+          }
+        }
+      }
+    }
   }
 
   public enableStats(): void {

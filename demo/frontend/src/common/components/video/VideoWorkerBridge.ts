@@ -33,6 +33,7 @@ import {
   DisableLITLoRAModeRequest,
   EnableFrameTrackingRequest,
   EnableLITLoRAModeRequest,
+  FinishCorrectionRequest,
   InitializeTrackerRequest,
   LogAnnotationsRequest,
   SessionStartFailedResponse,
@@ -492,6 +493,10 @@ export default class VideoWorkerBridge extends EventEmitter<VideoWorkerEventMap>
 
   disableLITLoRAMode(): void {
     this.sendRequest<DisableLITLoRAModeRequest>('disableLITLoRAMode');
+  }
+
+  finishCorrection(): void {
+    this.sendRequest<FinishCorrectionRequest>('finishCorrection');
   }
 
   getWorker_ONLY_USE_WITH_CAUTION(): Worker {

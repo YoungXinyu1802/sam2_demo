@@ -36,6 +36,7 @@ export interface MessagesEventMap {
   trackAndPlayThrottlingWarning: MessageEvent;
   frameTrackingEnabled: MessageEvent;
   frameTrackingDisabled: MessageEvent;
+  correctionSaved: MessageEvent;
   effectsMessage: MessageEvent;
 }
 
@@ -84,6 +85,11 @@ export const defaultMessageMap: MessagesEventMap = {
     text: 'Frame-by-frame tracking disabled.',
     shown: false,
     options: {expire: true, repeat: false, duration: 3000},
+  },
+  correctionSaved: {
+    text: 'Correction saved for LoRA training!',
+    shown: false,
+    options: {expire: true, repeat: true, duration: 3000, type: 'info'},
   },
   effectsMessage: {
     text: "Tip: If you aren't sure where to get started, click \"Surprise Me\" to apply a surprise effect to your video.",

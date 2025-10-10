@@ -11,7 +11,7 @@ import numpy as np
 import random
 import os
 
-from matplotlib import pyplot as plt
+# from matplotlib import pyplot as plt
 import cv2
 from pycocotools import mask as MaskUtils
 import json, cv2, colorsys

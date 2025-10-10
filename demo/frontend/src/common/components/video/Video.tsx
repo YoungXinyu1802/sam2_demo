@@ -126,6 +126,7 @@ export type VideoRef = {
   disableFrameTracking(): void;
   enableLITLoRAMode(): void;
   disableLITLoRAMode(): void;
+  finishCorrection(): void;
   getWorker_ONLY_USE_WITH_CAUTION(): Worker;
 };
 
@@ -265,6 +266,9 @@ export default forwardRef<VideoRef, Props>(function Video(
       },
       disableLITLoRAMode(): void {
         bridge.disableLITLoRAMode();
+      },
+      finishCorrection(): void {
+        bridge.finishCorrection();
       },
       getWorker_ONLY_USE_WITH_CAUTION() {
         return bridge.getWorker_ONLY_USE_WITH_CAUTION();
