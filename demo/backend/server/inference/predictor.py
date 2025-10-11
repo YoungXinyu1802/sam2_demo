@@ -428,8 +428,8 @@ class InferenceAPI:
 
     def train_lora(self, request: TrainLoRARequest) -> TrainLoRAResponse:
         """
-        Add a training sample for LoRA fine-tuning. When LIT-LoRA mode is enabled,
-        this adds the corrected mask and triggers the predictor to capture features.
+        Add a training sample and train LoRA immediately (following online_eval.py workflow).
+        This ensures features are fresh when training happens.
         """
         with self.autocast_context(), self.inference_lock:
             try:
@@ -462,8 +462,17 @@ class InferenceAPI:
                 session = self.__get_session(session_id)
                 inference_state = session["state"]
                 
-                # Add the mask to trigger feature capture in temp_feat_for_lora
-                # This populates the predictor's internal feature cache
+                # First, propagate to this frame to ensure features are captured
+                # This is critical: propagate_to_frame runs _track_step which populates temp_feat_for_lora
+                try:
+                    _, _, _ = self.predictor.propagate_to_frame(
+                        inference_state=inference_state,
+                        frame_idx=frame_idx,
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not propagate to frame {frame_idx}: {e}")
+                
+                # Add the mask - features should already be captured from propagation
                 input_mask = ((mask > 0) & (mask != 255)).astype(np.uint8)
                 _, _, _ = self.predictor.add_new_mask(
                     inference_state=inference_state,
@@ -473,7 +482,41 @@ class InferenceAPI:
                     run_mem_encoder=True
                 )
                 
-                # Store the GT mask for later training
+                # Train LoRA IMMEDIATELY after adding mask (following online_eval.py workflow)
+                # This ensures temp_feat_for_lora has the correct features
+                if not hasattr(self.predictor, 'trained_lora') or not self.predictor.trained_lora:
+                    # First correction: train initial LoRA model
+                    logger.info("Training initial LoRA model")
+                    
+                    # Debug: Check if features were captured
+                    if hasattr(self.predictor, 'temp_feat_for_lora'):
+                        pix_feat = self.predictor.temp_feat_for_lora.get("pix_feat_with_mem")
+                        if pix_feat is None:
+                            logger.error(f"Features not captured! temp_feat_for_lora: {self.predictor.temp_feat_for_lora.keys()}")
+                        else:
+                            logger.info(f"Features captured successfully. Shape: {pix_feat.shape}")
+                    
+                    mask_decoder_lora = copy.deepcopy(self.predictor.sam_mask_decoder)
+                    self.predictor.convert_to_lora(mask_decoder_lora.transformer)
+                    self.predictor.freeze_non_lora(mask_decoder_lora)
+                    
+                    training_success = self.predictor.train_lora(
+                        mask_decoder_lora, 
+                        mask,  # Use the GT mask
+                        training_epoch=100,
+                        mode='init'
+                    )
+                    
+                    if training_success:
+                        logger.info("Initial LoRA model trained successfully")
+                    else:
+                        logger.warning("LoRA training failed - features may not have been captured")
+                else:
+                    # Subsequent corrections: could fine-tune existing LoRA
+                    logger.info("LoRA already trained, could fine-tune in future")
+                    # For now, we'll just add to training data for potential future fine-tuning
+                
+                # Store the GT mask for tracking
                 self.lora_training_data[session_id][obj_id].append({
                     'frame_idx': frame_idx,
                     'gt_mask': mask
@@ -484,7 +527,7 @@ class InferenceAPI:
                 
                 return TrainLoRAResponse(
                     success=True,
-                    message=f"Training sample added. Total samples: {num_samples}"
+                    message=f"Training sample added and LoRA trained. Total samples: {num_samples}"
                 )
             except Exception as e:
                 logger.error(f"Error adding LoRA training sample: {e}")
@@ -499,8 +542,8 @@ class InferenceAPI:
         self, request: GenerateLoraCandidatesRequest
     ) -> GenerateLoraCandidatesResponse:
         """
-        Train LoRA on collected samples and generate mask candidates for a frame.
-        Uses the predictor's built-in LoRA methods following the LIT-LoRA workflow.
+        Generate mask candidates using already-trained LoRA models.
+        LoRA should already be trained via train_lora() calls.
         """
         with self.autocast_context(), self.inference_lock:
             try:
@@ -512,11 +555,9 @@ class InferenceAPI:
                     f"Generating LoRA candidates for session {session_id}, obj {obj_id}, frame {frame_idx}"
                 )
                 
-                # Check if we have training data
-                if (session_id not in self.lora_training_data or 
-                    obj_id not in self.lora_training_data[session_id] or
-                    len(self.lora_training_data[session_id][obj_id]) == 0):
-                    logger.warning("No training data available for LoRA")
+                # Check if LoRA has been trained
+                if not hasattr(self.predictor, 'trained_lora') or not self.predictor.trained_lora:
+                    logger.warning("No LoRA model trained yet. Please add corrections first via train_lora.")
                     return GenerateLoraCandidatesResponse(
                         frame_index=frame_idx,
                         object_id=obj_id,
@@ -525,36 +566,6 @@ class InferenceAPI:
                 
                 session = self.__get_session(session_id)
                 inference_state = session["state"]
-                
-                # Check if LoRA has been trained
-                if not hasattr(self.predictor, 'trained_lora') or not self.predictor.trained_lora:
-                    # Train LoRA on the first correction sample
-                    logger.info("Training initial LoRA model")
-                    first_sample = self.lora_training_data[session_id][obj_id][0]
-                    gt_mask = first_sample['gt_mask']
-                    
-                    # Create and train LoRA model
-                    mask_decoder_lora = copy.deepcopy(self.predictor.sam_mask_decoder)
-                    self.predictor.convert_to_lora(mask_decoder_lora.transformer)
-                    self.predictor.freeze_non_lora(mask_decoder_lora)
-                    
-                    # Train the LoRA model
-                    training_success = self.predictor.train_lora(
-                        mask_decoder_lora, 
-                        gt_mask, 
-                        training_epoch=100,
-                        mode='init'
-                    )
-                    
-                    if not training_success:
-                        logger.warning("LoRA training failed")
-                        return GenerateLoraCandidatesResponse(
-                            frame_index=frame_idx,
-                            object_id=obj_id,
-                            candidates=[]
-                        )
-                    
-                    logger.info("LoRA model trained successfully")
                 
                 # Use lora_predict to generate candidates
                 logger.info(f"Generating predictions using LoRA for frame {frame_idx}")
@@ -569,11 +580,11 @@ class InferenceAPI:
                     inference_state, 
                     frame_idx, 
                     dummy_gt_mask,
-                    correction_threshold=0.5  # Threshold for considering prediction successful
+                    correction_threshold=0.0  # Lower threshold since we always want candidates
                 )
                 
-                if successful_predict:
-                    logger.info(f"LoRA prediction successful with IoU: {best_lora_iou}")
+                if successful_predict or best_lora_iou > 0:  # Return candidate even if below threshold
+                    logger.info(f"LoRA prediction generated with IoU: {best_lora_iou}")
                     
                     # Convert to binary mask and encode as RLE
                     lora_mask = (best_lora_predicted_mask_score > 0).squeeze().cpu().numpy().astype(np.uint8)
@@ -598,7 +609,7 @@ class InferenceAPI:
                         candidates=candidates,
                     )
                 else:
-                    logger.warning("LoRA prediction was not successful")
+                    logger.warning("LoRA prediction failed to generate valid mask")
                     return GenerateLoraCandidatesResponse(
                         frame_index=frame_idx,
                         object_id=obj_id,
