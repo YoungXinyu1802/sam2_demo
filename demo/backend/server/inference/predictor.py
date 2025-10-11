@@ -630,7 +630,7 @@ class InferenceAPI:
                     predicted_mask_score = candidate['predicted_mask_score']
                     
                     # Convert to binary mask and encode as RLE
-                    lora_mask = (predicted_mask_score > 0).squeeze().cpu().numpy().astype(np.uint8)
+                    lora_mask = (predicted_mask_score[0] > 0).squeeze().cpu().numpy().astype(np.uint8)
                     mask_rle = encode_masks(np.array(lora_mask, dtype=np.uint8, order="F"))
                     mask_rle["counts"] = mask_rle["counts"].decode()
                     

@@ -72,76 +72,72 @@ export default function LoRACandidateSelector() {
   return (
     <div
       style={{
-        position: 'absolute',
-        bottom: '100px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        padding: '20px',
-        borderRadius: '12px',
-        zIndex: 1000,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        padding: '16px',
+        margin: '12px',
+        borderRadius: '8px',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
         display: 'flex',
         flexDirection: 'column',
         gap: '12px',
-        minWidth: '300px',
       }}>
       <div
         style={{
           color: 'white',
-          fontSize: '16px',
+          fontSize: '14px',
           fontWeight: 'bold',
           marginBottom: '4px',
-          textAlign: 'center',
         }}>
-        Select a LoRA Candidate
+        Select LoRA Candidate
       </div>
       <div
         style={{
           color: '#aaa',
-          fontSize: '12px',
-          marginBottom: '12px',
-          textAlign: 'center',
+          fontSize: '11px',
+          marginBottom: '8px',
+          lineHeight: '1.4',
         }}>
-        Masks are shown on the video - click a button to apply
+        Masks are overlaid on the video. Click a candidate to apply it.
       </div>
       
-      <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center'}}>
+      <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
         {candidateData.candidates.map((candidate, idx) => (
           <button
             key={candidate.index}
             onClick={() => handleSelectCandidate(candidate.index)}
             style={{
-              padding: '12px 20px',
+              padding: '10px 14px',
               backgroundColor: CANDIDATE_COLORS[idx % CANDIDATE_COLORS.length],
               color: 'white',
               border: 'none',
-              borderRadius: '8px',
+              borderRadius: '6px',
               cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: 'bold',
+              fontSize: '13px',
+              fontWeight: '600',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              transition: 'transform 0.2s, box-shadow 0.2s',
+              gap: '10px',
+              transition: 'transform 0.15s, box-shadow 0.15s',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'scale(1.05)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+              e.currentTarget.style.transform = 'translateX(2px)';
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.transform = 'translateX(0)';
               e.currentTarget.style.boxShadow = 'none';
             }}>
             <div
               style={{
-                width: '20px',
-                height: '20px',
+                width: '24px',
+                height: '24px',
                 borderRadius: '50%',
-                backgroundColor: 'rgba(255,255,255,0.3)',
+                backgroundColor: 'rgba(255,255,255,0.25)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontSize: '12px',
+                fontWeight: 'bold',
               }}>
               {idx + 1}
             </div>
@@ -153,13 +149,14 @@ export default function LoRACandidateSelector() {
       <button
         onClick={handleRejectAll}
         style={{
-          padding: '10px 20px',
-          backgroundColor: '#666',
+          padding: '10px 14px',
+          backgroundColor: '#444',
           color: 'white',
           border: 'none',
-          borderRadius: '8px',
+          borderRadius: '6px',
           cursor: 'pointer',
-          fontSize: '14px',
+          fontSize: '13px',
+          fontWeight: '600',
           marginTop: '4px',
           transition: 'background-color 0.2s',
         }}
@@ -167,7 +164,7 @@ export default function LoRACandidateSelector() {
           e.currentTarget.style.backgroundColor = '#555';
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = '#666';
+          e.currentTarget.style.backgroundColor = '#444';
         }}>
         Reject All
       </button>

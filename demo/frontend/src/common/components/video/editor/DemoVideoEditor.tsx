@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import LoRACandidateSelector from '@/common/components/annotations/LoRACandidateSelector';
 import TrackletsAnnotation from '@/common/components/annotations/TrackletsAnnotation';
 import useCloseSessionBeforeUnload from '@/common/components/session/useCloseSessionBeforeUnload';
 import MessagesSnackbar from '@/common/components/snackbar/MessagesSnackbar';
@@ -346,7 +345,6 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
           <div className="bg-graydark-800 w-full">
             <VideoFilmstripWithPlayback />
             <TrackletsAnnotation />
-            <LoRACandidateSelector />
           </div>
         </VideoEditor>
       </div>
