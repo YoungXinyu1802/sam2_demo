@@ -1299,22 +1299,47 @@ class SAM2VideoPredictor(SAM2Base):
         return True
 
     @torch.inference_mode()
-    def lora_predict(self, inference_state, frame_idx, gt_mask, correction_threshold=0.5):
-        best_lora_iou = -1
-        best_lora_idx = -1
-        successful_predict = False
-        pix_feat_with_mem = self.temp_feat_for_lora["pix_feat_with_mem"]
+    def lora_predict_all_candidates(self, inference_state, frame_idx):
+        """
+        Generate mask candidates from all trained LoRA models.
+        Returns list of candidates for user to choose from.
+        Does NOT automatically apply any candidate to memory.
+        """
+        # Debug: Check LoRA status
+        print(f"[DEBUG] lora_predict_all_candidates called for frame {frame_idx}")
+        print(f"[DEBUG] trained_lora: {getattr(self, 'trained_lora', False)}")
+        print(f"[DEBUG] multi_lora length: {len(getattr(self, 'multi_lora', []))}")
+        
+        if not hasattr(self, 'multi_lora') or len(self.multi_lora) == 0:
+            print("[DEBUG] No LoRA models found in multi_lora!")
+            return []
+        
+        pix_feat_with_mem = self.temp_feat_for_lora.get("pix_feat_with_mem")
+        if pix_feat_with_mem is None:
+            print("[DEBUG] pix_feat_with_mem is None!")
+            print(f"[DEBUG] temp_feat_for_lora keys: {self.temp_feat_for_lora.keys()}")
+            return []
+        
+        print(f"[DEBUG] pix_feat_with_mem shape: {pix_feat_with_mem.shape}")
+        
         positional_encodings = self.positional_encodings_for_lora
         sparse_embeddings = self.sparse_embeddings_for_lora
         dense_embeddings = self.dense_embeddings_for_lora
         high_res_features = self.temp_feat_for_lora["high_res_features"]
+        
+        # Generate predictions from all LoRA models
+        candidates = []
+        print(f"[DEBUG] Generating predictions from {len(self.multi_lora)} LoRA models")
         for lora_idx, mask_decoder_lora in enumerate(self.multi_lora):
+            # Create a dummy GT mask for the predict function (not used for actual comparison)
+            H, W = inference_state["video_height"], inference_state["video_width"]
+            dummy_gt_mask = np.zeros((H, W), dtype=np.uint8)
+            
             (
                 low_res_masks_lora,
                 high_res_masks_lora,
                 object_score_logits_lora,
-                # sam_output_tokens,
-                lora_iou,
+                lora_iou,  # This is computed against dummy mask, ignore it
                 lora_predicted_mask_score
             ) = predict(
                 model=mask_decoder_lora,
@@ -1324,69 +1349,88 @@ class SAM2VideoPredictor(SAM2Base):
                 dense_embeddings=dense_embeddings,
                 high_res_features=high_res_features,
                 image_size=self.image_size,
-                original_gt_mask=gt_mask
+                original_gt_mask=dummy_gt_mask
             )
-            if lora_iou > best_lora_iou:
-                low_res_masks_best = low_res_masks_lora
-                high_res_masks_best = high_res_masks_lora
-                object_score_logits_best = object_score_logits_lora
-                best_lora_predicted_mask_score = lora_predicted_mask_score
-                # best_sam_output_tokens = sam_output_tokens
-                best_lora_iou = lora_iou
-                best_lora_idx = lora_idx
-        # encode the memory and change the inference_state output
-        if best_lora_iou > correction_threshold:
-            successful_predict = True
-            # encode to the memory
-            maskmem_features, maskmem_pos_enc = self._encode_new_memory(
-                current_vision_feats=self.temp_feat_for_lora["current_vision_feats"],
-                feat_sizes=self.temp_feat_for_lora["feat_sizes"],
-                pred_masks_high_res=high_res_masks_best,
-                object_score_logits=object_score_logits_best,
-                is_mask_from_pts=False,
-            )
-            storage_device = inference_state["storage_device"]
-            maskmem_features = maskmem_features.to(torch.bfloat16)
-            maskmem_features = maskmem_features.to(storage_device, non_blocking=True)
-            # "maskmem_pos_enc" is the same across frames, so we only need to store one copy of it
-            maskmem_pos_enc = self._get_maskmem_pos_enc(
-                inference_state, {"maskmem_pos_enc": maskmem_pos_enc}
-            )
-            # change the inference_state output
-            compact_current_out = {
-                "maskmem_features": maskmem_features,
-                "maskmem_pos_enc": maskmem_pos_enc,
-                "pred_masks": low_res_masks_best,
-                "obj_ptr": self.temp_feat_for_lora['obj_ptr'],
-                "object_score_logits": object_score_logits_best,
+            
+            # Store candidate info (will be returned to user for selection)
+            candidate = {
+                'lora_idx': lora_idx,
+                'low_res_masks': low_res_masks_lora,
+                'high_res_masks': high_res_masks_lora,
+                'object_score_logits': object_score_logits_lora,
+                'predicted_mask_score': lora_predicted_mask_score,
             }
-            obj_output_dict = inference_state["output_dict_per_obj"][0]
-            obj_output_dict["non_cond_frame_outputs"][frame_idx] = compact_current_out
-            # obj_output_dict["cond_frame_outputs"][frame_idx] = compact_current_out
-            # add to the replay buffer
-            with torch.inference_mode(False):
-                gt_mask_resized = torch.tensor(gt_mask, dtype=torch.bool).float().to(storage_device)[None, None]
-                gt_mask_resized = torch.nn.functional.interpolate(
-                    gt_mask_resized,
-                    size=(self.image_size, self.image_size),
-                    align_corners=False,
-                    mode="bilinear",
-                    antialias=True,  # use antialias for downsampling
-                )
-                gt_mask_resized = (gt_mask_resized >= 0.5).float()
-                buffer_data_point = (
-                    frame_idx,
-                    pix_feat_with_mem.clone(),     # normal tensor
-                    positional_encodings.clone(),
-                    sparse_embeddings.clone(),
-                    dense_embeddings.clone(),
-                    high_res_features,
-                    gt_mask_resized.clone(),
-                    gt_mask,  # if gt_mask is numpy
-                    best_lora_iou,
-                )
-                self.correction_buff_moe[best_lora_idx].append(buffer_data_point)
-        return successful_predict, best_lora_iou, best_lora_idx, best_lora_predicted_mask_score
+            candidates.append(candidate)
+        
+        return candidates
+    
+    def apply_lora_candidate(self, inference_state, frame_idx, candidate_idx):
+        """
+        Apply a selected LoRA candidate to memory.
+        This is called after user chooses a candidate.
+        """
+        if candidate_idx >= len(self.multi_lora):
+            raise ValueError(f"Invalid candidate index: {candidate_idx}")
+        
+        # Re-generate the specific candidate's prediction
+        pix_feat_with_mem = self.temp_feat_for_lora["pix_feat_with_mem"]
+        positional_encodings = self.positional_encodings_for_lora
+        sparse_embeddings = self.sparse_embeddings_for_lora
+        dense_embeddings = self.dense_embeddings_for_lora
+        high_res_features = self.temp_feat_for_lora["high_res_features"]
+        
+        mask_decoder_lora = self.multi_lora[candidate_idx]
+        
+        H, W = inference_state["video_height"], inference_state["video_width"]
+        dummy_gt_mask = np.zeros((H, W), dtype=np.uint8)
+        
+        (
+            low_res_masks,
+            high_res_masks,
+            object_score_logits,
+            _,
+            predicted_mask_score
+        ) = predict(
+            model=mask_decoder_lora,
+            pix_feat_with_mem=pix_feat_with_mem,
+            image_pe=positional_encodings,
+            sparse_embeddings=sparse_embeddings,
+            dense_embeddings=dense_embeddings,
+            high_res_features=high_res_features,
+            image_size=self.image_size,
+            original_gt_mask=dummy_gt_mask
+        )
+        
+        # Encode to memory (same as correction)
+        maskmem_features, maskmem_pos_enc = self._encode_new_memory(
+            current_vision_feats=self.temp_feat_for_lora["current_vision_feats"],
+            feat_sizes=self.temp_feat_for_lora["feat_sizes"],
+            pred_masks_high_res=high_res_masks,
+            object_score_logits=object_score_logits,
+            is_mask_from_pts=False,
+        )
+        
+        storage_device = inference_state["storage_device"]
+        maskmem_features = maskmem_features.to(torch.bfloat16)
+        maskmem_features = maskmem_features.to(storage_device, non_blocking=True)
+        maskmem_pos_enc = self._get_maskmem_pos_enc(
+            inference_state, {"maskmem_pos_enc": maskmem_pos_enc}
+        )
+        
+        # Update inference_state output
+        compact_current_out = {
+            "maskmem_features": maskmem_features,
+            "maskmem_pos_enc": maskmem_pos_enc,
+            "pred_masks": low_res_masks,
+            "obj_ptr": self.temp_feat_for_lora['obj_ptr'],
+            "object_score_logits": object_score_logits,
+        }
+        
+        obj_output_dict = inference_state["output_dict_per_obj"][0]
+        obj_output_dict["non_cond_frame_outputs"][frame_idx] = compact_current_out
+        
+        # Return the applied mask for confirmation
+        return predicted_mask_score
 
 
 class SAM2VideoPredictorVOS(SAM2VideoPredictor):

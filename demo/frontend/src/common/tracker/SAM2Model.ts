@@ -633,14 +633,72 @@ export class SAM2Model extends Tracker {
     this._context.enableFrameTracking(false);
   }
 
-  public enableLITLoRAMode(): void {
-    this._litLoRAModeEnabled = true;
-    Logger.info('LIT_LoRA mode enabled');
+  public async enableLITLoRAMode(): Promise<void> {
+    const sessionId = this._session.id;
+    if (!sessionId) {
+      Logger.warn('No session ID for enabling LoRA mode');
+      return;
+    }
+
+    try {
+      const url = `${this._endpoint}/enable_lora_mode`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      Logger.info('Backend LoRA mode enabled:', result);
+      
+      this._litLoRAModeEnabled = true;
+      Logger.info('LIT_LoRA mode enabled');
+    } catch (error) {
+      Logger.error('Failed to enable LoRA mode:', error);
+      throw error;
+    }
   }
 
-  public disableLITLoRAMode(): void {
-    this._litLoRAModeEnabled = false;
-    Logger.info('LIT_LoRA mode disabled');
+  public async disableLITLoRAMode(): Promise<void> {
+    const sessionId = this._session.id;
+    if (!sessionId) {
+      Logger.warn('No session ID for disabling LoRA mode');
+      return;
+    }
+
+    try {
+      const url = `${this._endpoint}/disable_lora_mode`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      Logger.info('Backend LoRA mode disabled:', result);
+      
+      this._litLoRAModeEnabled = false;
+      Logger.info('LIT_LoRA mode disabled');
+    } catch (error) {
+      Logger.error('Failed to disable LoRA mode:', error);
+      throw error;
+    }
   }
 
   public finishCorrection(): void {

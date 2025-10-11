@@ -119,6 +119,38 @@ class InferenceAPI:
             self.predictor.LIT_LoRA_mode = False
             self.lit_lora_mode = False
 
+    def enable_lora_mode_endpoint(self, request):
+        """HTTP endpoint to enable LIT-LoRA mode"""
+        from inference.data_types import EnableLoRAModeResponse
+        try:
+            self.enable_lora_mode()
+            return EnableLoRAModeResponse(
+                success=True,
+                message="LIT-LoRA mode enabled"
+            )
+        except Exception as e:
+            logger.error(f"Error enabling LoRA mode: {e}")
+            return EnableLoRAModeResponse(
+                success=False,
+                message=f"Failed to enable LoRA mode: {str(e)}"
+            )
+    
+    def disable_lora_mode_endpoint(self, request):
+        """HTTP endpoint to disable LIT-LoRA mode"""
+        from inference.data_types import DisableLoRAModeResponse
+        try:
+            self.disable_lora_mode()
+            return DisableLoRAModeResponse(
+                success=True,
+                message="LIT-LoRA mode disabled"
+            )
+        except Exception as e:
+            logger.error(f"Error disabling LoRA mode: {e}")
+            return DisableLoRAModeResponse(
+                success=False,
+                message=f"Failed to disable LoRA mode: {str(e)}"
+            )
+
     def autocast_context(self):
         if self.device.type == "cuda":
             return torch.autocast("cuda", dtype=torch.bfloat16)
@@ -567,54 +599,58 @@ class InferenceAPI:
                 session = self.__get_session(session_id)
                 inference_state = session["state"]
                 
-                # Use lora_predict to generate candidates
-                logger.info(f"Generating predictions using LoRA for frame {frame_idx}")
+                # First, propagate to frame to capture features
+                try:
+                    _, _, _ = self.predictor.propagate_to_frame(
+                        inference_state=inference_state,
+                        frame_idx=frame_idx,
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not propagate to frame {frame_idx}: {e}")
                 
-                # Create a dummy GT mask for the frame (used for evaluation)
-                H = inference_state["video_height"]
-                W = inference_state["video_width"]
-                dummy_gt_mask = np.zeros((H, W), dtype=np.uint8)
+                # Generate candidates from ALL LoRA models
+                logger.info(f"Generating predictions from all LoRA models for frame {frame_idx}")
                 
-                # Use lora_predict to get predictions from all trained LoRA models
-                successful_predict, best_lora_iou, best_lora_idx, best_lora_predicted_mask_score = self.predictor.lora_predict(
-                    inference_state, 
-                    frame_idx, 
-                    dummy_gt_mask,
-                    correction_threshold=0.0  # Lower threshold since we always want candidates
+                lora_candidates = self.predictor.lora_predict_all_candidates(
+                    inference_state=inference_state,
+                    frame_idx=frame_idx
                 )
                 
-                if successful_predict or best_lora_iou > 0:  # Return candidate even if below threshold
-                    logger.info(f"LoRA prediction generated with IoU: {best_lora_iou}")
+                if not lora_candidates:
+                    logger.warning("No LoRA candidates generated")
+                    return GenerateLoraCandidatesResponse(
+                        frame_index=frame_idx,
+                        object_id=obj_id,
+                        candidates=[]
+                    )
+                
+                # Convert each candidate to RLE format
+                candidates = []
+                for idx, candidate in enumerate(lora_candidates):
+                    predicted_mask_score = candidate['predicted_mask_score']
                     
                     # Convert to binary mask and encode as RLE
-                    lora_mask = (best_lora_predicted_mask_score > 0).squeeze().cpu().numpy().astype(np.uint8)
+                    lora_mask = (predicted_mask_score > 0).squeeze().cpu().numpy().astype(np.uint8)
                     mask_rle = encode_masks(np.array(lora_mask, dtype=np.uint8, order="F"))
                     mask_rle["counts"] = mask_rle["counts"].decode()
                     
-                    candidates = [
+                    candidates.append(
                         LoRACandidateValue(
                             mask=Mask(
                                 size=mask_rle["size"],
                                 counts=mask_rle["counts"],
                             ),
-                            confidence=float(best_lora_iou),
+                            confidence=float(idx),  # Use index as identifier
                         )
-                    ]
-                    
-                    logger.info(f"Generated {len(candidates)} LoRA candidates")
-                    
-                    return GenerateLoraCandidatesResponse(
-                        frame_index=frame_idx,
-                        object_id=obj_id,
-                        candidates=candidates,
                     )
-                else:
-                    logger.warning("LoRA prediction failed to generate valid mask")
-                    return GenerateLoraCandidatesResponse(
-                        frame_index=frame_idx,
-                        object_id=obj_id,
-                        candidates=[],
-                    )
+                
+                logger.info(f"Generated {len(candidates)} LoRA candidates for user selection")
+                
+                return GenerateLoraCandidatesResponse(
+                    frame_index=frame_idx,
+                    object_id=obj_id,
+                    candidates=candidates,
+                )
                 
             except Exception as e:
                 logger.error(f"Error generating LoRA candidates: {e}")

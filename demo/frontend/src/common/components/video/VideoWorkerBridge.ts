@@ -487,12 +487,22 @@ export default class VideoWorkerBridge extends EventEmitter<VideoWorkerEventMap>
     this.sendRequest<DisableFrameTrackingRequest>('disableFrameTracking');
   }
 
-  enableLITLoRAMode(): void {
-    this.sendRequest<EnableLITLoRAModeRequest>('enableLITLoRAMode');
+  enableLITLoRAMode(): Promise<void> {
+    return new Promise((resolve) => {
+      this.sendRequest<EnableLITLoRAModeRequest>('enableLITLoRAMode');
+      // The async operation happens in the worker/tracker, so we resolve immediately
+      // The tracker will handle the actual HTTP call
+      resolve();
+    });
   }
 
-  disableLITLoRAMode(): void {
-    this.sendRequest<DisableLITLoRAModeRequest>('disableLITLoRAMode');
+  disableLITLoRAMode(): Promise<void> {
+    return new Promise((resolve) => {
+      this.sendRequest<DisableLITLoRAModeRequest>('disableLITLoRAMode');
+      // The async operation happens in the worker/tracker, so we resolve immediately
+      // The tracker will handle the actual HTTP call
+      resolve();
+    });
   }
 
   finishCorrection(): void {

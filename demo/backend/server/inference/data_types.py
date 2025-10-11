@@ -149,6 +149,16 @@ class GenerateLoraCandidatesRequest(BaseRequest):
 
 @dataclass_json
 @dataclass
+class ApplyLoraCandidateRequest(BaseRequest):
+    type: str
+    session_id: str
+    object_id: int
+    frame_index: int
+    candidate_index: int
+
+
+@dataclass_json
+@dataclass
 class StartSessionResponse:
     session_id: str
 
@@ -227,6 +237,41 @@ class GenerateLoraCandidatesResponse:
 @dataclass_json
 @dataclass
 class TrainLoRAResponse:
+    success: bool
+    message: str
+
+
+@dataclass_json
+@dataclass
+class ApplyLoraCandidateResponse:
+    success: bool
+    message: str
+
+
+@dataclass_json
+@dataclass
+class EnableLoRAModeRequest(BaseRequest):
+    type: str
+    session_id: str
+
+
+@dataclass_json
+@dataclass
+class EnableLoRAModeResponse:
+    success: bool
+    message: str
+
+
+@dataclass_json
+@dataclass
+class DisableLoRAModeRequest(BaseRequest):
+    type: str
+    session_id: str
+
+
+@dataclass_json
+@dataclass
+class DisableLoRAModeResponse:
     success: bool
     message: str
 

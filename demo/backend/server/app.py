@@ -20,6 +20,8 @@ from data.store import set_videos
 from flask import Flask, make_response, Request, request, Response, send_from_directory
 from flask_cors import CORS
 from inference.data_types import (
+    EnableLoRAModeRequest,
+    DisableLoRAModeRequest,
     GenerateLoraCandidatesRequest,
     PropagateDataResponse,
     PropagateInVideoRequest,
@@ -147,6 +149,56 @@ def generate_lora_candidates() -> Response:
         return make_response(response.to_json(), 200)
     except Exception as e:
         logger.error(f"Error in generate_lora_candidates: {e}", exc_info=True)
+        return make_response({"error": str(e)}, 500)
+
+
+# TOOD: Protect route with ToS permission check
+@app.route("/enable_lora_mode", methods=["POST", "OPTIONS"])
+def enable_lora_mode() -> Response:
+    if request.method == "OPTIONS":
+        # Handle CORS preflight
+        response = make_response("", 200)
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return response
+        
+    try:
+        data = request.json
+        logger.info(f"Received enable_lora_mode request: session={data.get('session_id')}")
+        req = EnableLoRAModeRequest(
+            type="enable_lora_mode",
+            session_id=data["session_id"],
+        )
+        
+        response = inference_api.enable_lora_mode_endpoint(request=req)
+        return make_response(response.to_json(), 200)
+    except Exception as e:
+        logger.error(f"Error in enable_lora_mode: {e}", exc_info=True)
+        return make_response({"error": str(e)}, 500)
+
+
+# TOOD: Protect route with ToS permission check
+@app.route("/disable_lora_mode", methods=["POST", "OPTIONS"])
+def disable_lora_mode() -> Response:
+    if request.method == "OPTIONS":
+        # Handle CORS preflight
+        response = make_response("", 200)
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return response
+        
+    try:
+        data = request.json
+        logger.info(f"Received disable_lora_mode request: session={data.get('session_id')}")
+        req = DisableLoRAModeRequest(
+            type="disable_lora_mode",
+            session_id=data["session_id"],
+        )
+        
+        response = inference_api.disable_lora_mode_endpoint(request=req)
+        return make_response(response.to_json(), 200)
+    except Exception as e:
+        logger.error(f"Error in disable_lora_mode: {e}", exc_info=True)
         return make_response({"error": str(e)}, 500)
 
 

@@ -45,23 +45,31 @@ export default function LITLoRAModeButton() {
     streamingState === 'partial' ||
     streamingState === 'aborting';
 
-  const handleToggleLITLoRAMode = useCallback(() => {
+  const handleToggleLITLoRAMode = useCallback(async () => {
     if (isDisabled) {
       return;
     }
 
     if (!isLITLoRAModeEnabled) {
       // Enable LIT_LoRA mode
-      enqueueMessage('frameTrackingEnabled'); // Reuse existing message
-      video?.enableLITLoRAMode();
-      setIsLITLoRAModeEnabled(true);
-      behaviorTracker.logTrackingEvent('enable_frame_tracking');
+      try {
+        await video?.enableLITLoRAMode();
+        enqueueMessage('frameTrackingEnabled');
+        setIsLITLoRAModeEnabled(true);
+        behaviorTracker.logTrackingEvent('enable_frame_tracking');
+      } catch (error) {
+        console.error('Failed to enable LoRA mode:', error);
+      }
     } else {
       // Disable LIT_LoRA mode
-      enqueueMessage('frameTrackingDisabled'); // Reuse existing message
-      video?.disableLITLoRAMode();
-      setIsLITLoRAModeEnabled(false);
-      behaviorTracker.logTrackingEvent('disable_frame_tracking');
+      try {
+        await video?.disableLITLoRAMode();
+        enqueueMessage('frameTrackingDisabled');
+        setIsLITLoRAModeEnabled(false);
+        behaviorTracker.logTrackingEvent('disable_frame_tracking');
+      } catch (error) {
+        console.error('Failed to disable LoRA mode:', error);
+      }
     }
   }, [isLITLoRAModeEnabled, isDisabled, video, enqueueMessage, setIsLITLoRAModeEnabled]);
 

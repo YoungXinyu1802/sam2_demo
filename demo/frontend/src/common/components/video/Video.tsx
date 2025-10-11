@@ -124,8 +124,8 @@ export type VideoRef = {
   clearPointsInVideo(): Promise<boolean>;
   enableFrameTracking(): void;
   disableFrameTracking(): void;
-  enableLITLoRAMode(): void;
-  disableLITLoRAMode(): void;
+  enableLITLoRAMode(): Promise<void>;
+  disableLITLoRAMode(): Promise<void>;
   finishCorrection(): void;
   getWorker_ONLY_USE_WITH_CAUTION(): Worker;
 };
@@ -261,11 +261,11 @@ export default forwardRef<VideoRef, Props>(function Video(
       disableFrameTracking(): void {
         bridge.disableFrameTracking();
       },
-      enableLITLoRAMode(): void {
-        bridge.enableLITLoRAMode();
+      enableLITLoRAMode(): Promise<void> {
+        return bridge.enableLITLoRAMode();
       },
-      disableLITLoRAMode(): void {
-        bridge.disableLITLoRAMode();
+      disableLITLoRAMode(): Promise<void> {
+        return bridge.disableLITLoRAMode();
       },
       finishCorrection(): void {
         bridge.finishCorrection();
