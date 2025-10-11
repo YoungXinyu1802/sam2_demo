@@ -150,6 +150,10 @@ export interface RenderingErrorEvent {
   error: ErrorObject;
 }
 
+export interface LoraCandidatesGeneratedEvent {
+  data: any;
+}
+
 export interface VideoWorkerEventMap {
   error: ErrorEvent;
   decode: DecodeEvent;
@@ -169,6 +173,7 @@ export interface VideoWorkerEventMap {
   streamingStarted: StreamingStartedEvent;
   streamingCompleted: StreamingCompletedEvent;
   streamingStateUpdate: StreamingStateUpdateEvent;
+  loraCandidatesGenerated: LoraCandidatesGeneratedEvent;
   // HTMLVideoElement events https://developer.mozilla.org/en-US/docs/Web/HTML/Element/video#events
   loadstart: LoadStartEvent;
   effectUpdate: EffectUpdateEvent;

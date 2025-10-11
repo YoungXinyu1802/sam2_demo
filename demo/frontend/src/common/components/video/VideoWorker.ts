@@ -162,6 +162,13 @@ self.addEventListener(
         case 'disableLITLoRAMode':
           tracker?.disableLITLoRAMode();
           break;
+        case 'applyLoraCandidate': {
+          const {objectId, frameIndex, candidateIndex} = event.data;
+          if (tracker && 'applyLoraCandidate' in tracker) {
+            await (tracker as any).applyLoraCandidate(objectId, frameIndex, candidateIndex);
+          }
+          break;
+        }
         case 'finishCorrection':
           tracker?.finishCorrection();
           break;

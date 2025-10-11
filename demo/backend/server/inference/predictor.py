@@ -662,6 +662,62 @@ class InferenceAPI:
                     candidates=[],
                 )
 
+    def apply_lora_candidate(
+        self, request
+    ):
+        """
+        Apply a selected LoRA candidate to memory (like a mask correction).
+        This is called when user chooses one of the displayed candidates.
+        """
+        from inference.data_types import ApplyLoraCandidateResponse
+        
+        with self.autocast_context(), self.inference_lock:
+            try:
+                session_id = request.session_id
+                obj_id = request.object_id
+                frame_idx = request.frame_index
+                candidate_idx = request.candidate_index
+                
+                logger.info(
+                    f"Applying LoRA candidate {candidate_idx} for session {session_id}, obj {obj_id}, frame {frame_idx}"
+                )
+                
+                # Check if LoRA has been trained
+                if not hasattr(self.predictor, 'trained_lora') or not self.predictor.trained_lora:
+                    logger.warning("No LoRA model trained yet")
+                    return ApplyLoraCandidateResponse(
+                        success=False,
+                        message="No LoRA model trained"
+                    )
+                
+                session = self.__get_session(session_id)
+                inference_state = session["state"]
+                
+                # Apply the selected candidate
+                logger.info(f"Applying candidate {candidate_idx} to memory")
+                
+                predicted_mask_score = self.predictor.apply_lora_candidate(
+                    inference_state=inference_state,
+                    frame_idx=frame_idx,
+                    candidate_idx=candidate_idx
+                )
+                
+                logger.info(f"Successfully applied LoRA candidate {candidate_idx}")
+                
+                return ApplyLoraCandidateResponse(
+                    success=True,
+                    message=f"Candidate {candidate_idx} applied successfully"
+                )
+                
+            except Exception as e:
+                logger.error(f"Error applying LoRA candidate: {e}")
+                import traceback
+                traceback.print_exc()
+                return ApplyLoraCandidateResponse(
+                    success=False,
+                    message=f"Error: {str(e)}"
+                )
+
     def __get_rle_mask_list(
         self, object_ids: List[int], masks: np.ndarray
     ) -> List[PropagateDataValue]:

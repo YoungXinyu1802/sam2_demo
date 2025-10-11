@@ -782,49 +782,69 @@ export class SAM2Model extends Tracker {
         const result = await response.json();
         Logger.info('LoRA candidates generated:', result);
 
-        // If we have candidates, update the masks
+        // Store candidates for user selection instead of auto-applying
         if (result.candidates && result.candidates.length > 0) {
-          const candidate = result.candidates[0]; // Use the first candidate
-          const tracklet = this._session.tracklets[objectId];
+          const candidates = result.candidates.map((candidate: any, index: number) => ({
+            index,
+            mask: candidate.mask,
+            confidence: candidate.confidence,
+          }));
           
-          if (tracklet && candidate.mask) {
-            // Update the tracklet with the LoRA-generated mask
-            const rleObject: RLEObject = {
-              size: candidate.mask.size,
-              counts: candidate.mask.counts,
-            };
-            
-            const decodedMask = decode([rleObject]);
-            const bbox = toBbox([rleObject]);
-            const isEmpty = false;
-
-            const mask: Mask = {
-              data: rleObject,
-              shape: [...decodedMask.shape],
-              bounds: [
-                [bbox[0], bbox[1]],
-                [bbox[0] + bbox[2], bbox[1] + bbox[3]],
-              ],
-              isEmpty,
-            };
-            
-            tracklet.masks[frameIndex] = mask;
-            Logger.info(`Applied LoRA mask for object ${objectId} with confidence ${candidate.confidence}`);
-          }
+          // Emit event with candidates for UI to display
+          this._context.sendLoraCandidates({
+            objectId,
+            frameIndex,
+            candidates,
+          });
+          
+          Logger.info(`Generated ${candidates.length} LoRA candidates for user selection`);
+        } else {
+          Logger.warn('No LoRA candidates generated');
         }
       }
-
-      // Update tracklets to reflect the new masks
-      this._updateTracklets();
-      
-      // Update the context with new masks
-      this._context.updateTracklets(
-        this._context.frameIndex,
-        Object.values(this._session.tracklets),
-        false,
-      );
     } catch (error) {
       Logger.error('Failed to generate LoRA candidates:', error);
+    }
+  }
+
+  public async applyLoraCandidate(
+    objectId: number,
+    frameIndex: number,
+    candidateIndex: number,
+  ): Promise<void> {
+    const sessionId = this._session.id;
+    if (!sessionId) {
+      Logger.warn('No session ID for applying LoRA candidate');
+      return;
+    }
+
+    try {
+      const url = `${this._endpoint}/apply_lora_candidate`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          object_id: objectId,
+          frame_index: frameIndex,
+          candidate_index: candidateIndex,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      Logger.info('LoRA candidate applied:', result);
+
+      // After applying, refresh the tracking to get the updated mask
+      await this.trackFrame(frameIndex);
+    } catch (error) {
+      Logger.error('Failed to apply LoRA candidate:', error);
+      throw error;
     }
   }
 

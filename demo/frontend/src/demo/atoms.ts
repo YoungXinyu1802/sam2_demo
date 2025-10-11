@@ -76,11 +76,17 @@ export const loraTrainingDataAtom = atom<Array<{
   mask: DataArray;
 }>>([]);
 
-export const loraMaskCandidatesAtom = atom<Array<{
+export type LoraCandidateData = {
   objectId: number;
-  mask: DataArray;
-  confidence: number;
-}> | null>(null);
+  frameIndex: number;
+  candidates: Array<{
+    index: number;
+    mask: DataArray;
+    confidence: number;
+  }>;
+};
+
+export const loraMaskCandidatesAtom = atom<LoraCandidateData | null>(null);
 
 // #####################
 // OBJECTS

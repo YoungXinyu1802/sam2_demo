@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import LoRACandidateSelector from '@/common/components/annotations/LoRACandidateSelector';
 import TrackletsAnnotation from '@/common/components/annotations/TrackletsAnnotation';
 import useCloseSessionBeforeUnload from '@/common/components/session/useCloseSessionBeforeUnload';
 import MessagesSnackbar from '@/common/components/snackbar/MessagesSnackbar';
@@ -31,6 +32,7 @@ import VideoEditor from '@/common/components/video/editor/VideoEditor';
 import useResetDemoEditor from '@/common/components/video/editor/useResetEditor';
 import useVideo from '@/common/components/video/editor/useVideo';
 import InteractionLayer from '@/common/components/video/layers/InteractionLayer';
+import {LoRACandidatesLayer} from '@/common/components/video/layers/LoRACandidatesLayer';
 import {PointsLayer} from '@/common/components/video/layers/PointsLayer';
 import LoadingStateScreen from '@/common/loading/LoadingStateScreen';
 import UploadLoadingScreen from '@/common/loading/UploadLoadingScreen';
@@ -43,6 +45,7 @@ import {
   isAddObjectEnabledAtom,
   isPlayingAtom,
   isVideoLoadingAtom,
+  loraMaskCandidatesAtom,
   pointsAtom,
   sessionAtom,
   streamingStateAtom,
@@ -108,6 +111,7 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
   );
   const setTrackletObjects = useSetAtom(trackletObjectsAtom);
   const setFrameIndex = useSetAtom(frameIndexAtom);
+  const setLoraCandidates = useSetAtom(loraMaskCandidatesAtom);
   const frameIndex = useAtomValue(frameIndexAtom);
   const points = useAtomValue(pointsAtom);
   const isAddObjectEnabled = useAtomValue(isAddObjectEnabledAtom);
@@ -175,6 +179,12 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
 
     video?.addEventListener('trackletsUpdated', onTrackletsUpdated);
 
+    function onLoraCandidatesGenerated(event: any) {
+      setLoraCandidates(event.data);
+    }
+
+    video?.addEventListener('loraCandidatesGenerated', onLoraCandidatesGenerated);
+
     function onRenderingError(event: RenderingErrorEvent) {
       setRenderingError(event.error);
     }
@@ -193,12 +203,14 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
       video?.removeEventListener('sessionStarted', onSessionStarted);
       video?.removeEventListener('sessionStartFailed', onSessionStartFailed);
       video?.removeEventListener('trackletsUpdated', onTrackletsUpdated);
+      video?.removeEventListener('loraCandidatesGenerated', onLoraCandidatesGenerated);
       video?.removeEventListener('renderingError', onRenderingError);
     };
   }, [
     setFrameIndex,
     setSession,
     setTrackletObjects,
+    setLoraCandidates,
     resetSession,
     inputVideo,
     video,
@@ -282,6 +294,11 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
           />
         </>
       )}
+      <LoRACandidatesLayer
+        key="lora-candidates-layer"
+        width={inputVideo.width}
+        height={inputVideo.height}
+      />
       {!isMobile && <MessagesSnackbar key="snackbar-layer" />}
     </>
   );
@@ -329,6 +346,7 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
           <div className="bg-graydark-800 w-full">
             <VideoFilmstripWithPlayback />
             <TrackletsAnnotation />
+            <LoRACandidateSelector />
           </div>
         </VideoEditor>
       </div>

@@ -243,6 +243,16 @@ class TrainLoRAResponse:
 
 @dataclass_json
 @dataclass
+class ApplyLoraCandidateRequest(BaseRequest):
+    type: str
+    session_id: str
+    object_id: int
+    frame_index: int
+    candidate_index: int
+
+
+@dataclass_json
+@dataclass
 class ApplyLoraCandidateResponse:
     success: bool
     message: str

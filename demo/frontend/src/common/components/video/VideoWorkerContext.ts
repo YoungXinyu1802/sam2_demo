@@ -510,6 +510,14 @@ export default class VideoWorkerContext {
     }
   }
 
+  public sendLoraCandidates(candidateData: any): void {
+    // Send candidates to main thread for UI display
+    self.postMessage({
+      action: 'loraCandidatesGenerated',
+      data: candidateData,
+    });
+  }
+
   public clearTrackletMasks(tracklet: Tracklet): void {
     this._tracklets = this._tracklets.filter(t => t.id != tracklet.id);
   }

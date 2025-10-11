@@ -20,6 +20,7 @@ from data.store import set_videos
 from flask import Flask, make_response, Request, request, Response, send_from_directory
 from flask_cors import CORS
 from inference.data_types import (
+    ApplyLoraCandidateRequest,
     EnableLoRAModeRequest,
     DisableLoRAModeRequest,
     GenerateLoraCandidatesRequest,
@@ -199,6 +200,34 @@ def disable_lora_mode() -> Response:
         return make_response(response.to_json(), 200)
     except Exception as e:
         logger.error(f"Error in disable_lora_mode: {e}", exc_info=True)
+        return make_response({"error": str(e)}, 500)
+
+
+# TOOD: Protect route with ToS permission check
+@app.route("/apply_lora_candidate", methods=["POST", "OPTIONS"])
+def apply_lora_candidate() -> Response:
+    if request.method == "OPTIONS":
+        # Handle CORS preflight
+        response = make_response("", 200)
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return response
+        
+    try:
+        data = request.json
+        logger.info(f"Received apply_lora_candidate request: {data}")
+        req = ApplyLoraCandidateRequest(
+            type="apply_lora_candidate",
+            session_id=data["session_id"],
+            object_id=data["object_id"],
+            frame_index=data["frame_index"],
+            candidate_index=data["candidate_index"],
+        )
+        
+        response = inference_api.apply_lora_candidate(request=req)
+        return make_response(response.to_json(), 200)
+    except Exception as e:
+        logger.error(f"Error in apply_lora_candidate: {e}", exc_info=True)
         return make_response({"error": str(e)}, 500)
 
 
