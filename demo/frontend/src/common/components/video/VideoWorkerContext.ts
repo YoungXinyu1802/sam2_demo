@@ -595,6 +595,13 @@ export default class VideoWorkerContext {
     // Reset tracking state when enabling/disabling
     this._lastTrackedFrame = -1;
     this._lastTrackedTime = 0;
+    
+    // Log total frames when enabling frame tracking
+    if (enabled && this._decodedVideo) {
+      console.log(`🎬 Frame-by-frame tracking enabled. Total frames: ${this._decodedVideo.numFrames}`);
+    } else if (!enabled) {
+      console.log('🎬 Frame-by-frame tracking disabled');
+    }
   }
 
   public setOnFrameCallback(callback: ((frameIndex: number) => Promise<void>) | null): void {

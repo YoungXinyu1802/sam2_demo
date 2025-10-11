@@ -126,6 +126,7 @@ export type VideoRef = {
   disableFrameTracking(): void;
   enableLITLoRAMode(): Promise<void>;
   disableLITLoRAMode(): Promise<void>;
+  generateLoraCandidates(): Promise<void>;
   finishCorrection(): void;
   getWorker_ONLY_USE_WITH_CAUTION(): Worker;
 };
@@ -266,6 +267,9 @@ export default forwardRef<VideoRef, Props>(function Video(
       },
       disableLITLoRAMode(): Promise<void> {
         return bridge.disableLITLoRAMode();
+      },
+      generateLoraCandidates(): Promise<void> {
+        return bridge.generateLoraCandidates();
       },
       finishCorrection(): void {
         bridge.finishCorrection();

@@ -33,6 +33,7 @@ import {
   DisableLITLoRAModeRequest,
   EnableFrameTrackingRequest,
   EnableLITLoRAModeRequest,
+  GenerateLoraCandidatesRequest,
   FinishCorrectionRequest,
   InitializeTrackerRequest,
   LogAnnotationsRequest,
@@ -504,6 +505,15 @@ export default class VideoWorkerBridge extends EventEmitter<VideoWorkerEventMap>
   disableLITLoRAMode(): Promise<void> {
     return new Promise((resolve) => {
       this.sendRequest<DisableLITLoRAModeRequest>('disableLITLoRAMode');
+      // The async operation happens in the worker/tracker, so we resolve immediately
+      // The tracker will handle the actual HTTP call
+      resolve();
+    });
+  }
+
+  generateLoraCandidates(): Promise<void> {
+    return new Promise((resolve) => {
+      this.sendRequest<GenerateLoraCandidatesRequest>('generateLoraCandidates');
       // The async operation happens in the worker/tracker, so we resolve immediately
       // The tracker will handle the actual HTTP call
       resolve();

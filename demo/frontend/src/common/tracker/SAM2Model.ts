@@ -742,13 +742,10 @@ export class SAM2Model extends Tracker {
   }
 
   public logPauseEvent(): void {
-    // When video pauses in LIT_LoRA mode, generate mask candidates
-    if (this._litLoRAModeEnabled && this._frameTrackingEnabled) {
-      this._generateLoraCandidates();
-    }
+    // No-op: LoRA candidate generation is now manual via button
   }
 
-  private async _generateLoraCandidates(): Promise<void> {
+  public async generateLoraCandidates(): Promise<void> {
     const sessionId = this._session.id;
     if (!sessionId) {
       Logger.warn('No session ID for LoRA candidate generation');

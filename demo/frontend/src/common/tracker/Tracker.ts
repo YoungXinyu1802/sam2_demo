@@ -76,6 +76,7 @@ export interface ITracker {
   disableFrameTracking(): void;
   enableLITLoRAMode(): Promise<void>;
   disableLITLoRAMode(): Promise<void>;
+  generateLoraCandidates(): Promise<void>;
   enableStats(): void;
   logPlayEvent(): void;
   logPauseEvent(): void;
@@ -107,6 +108,7 @@ export abstract class Tracker implements ITracker {
   abstract disableFrameTracking(): void;
   abstract enableLITLoRAMode(): Promise<void>;
   abstract disableLITLoRAMode(): Promise<void>;
+  abstract generateLoraCandidates(): Promise<void>;
   abstract finishCorrection(): void;
   abstract enableStats(): void;
   abstract logPlayEvent(): void;
