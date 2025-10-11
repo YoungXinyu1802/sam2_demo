@@ -14,28 +14,7 @@ from tqdm import tqdm
 
 from sam2.modeling.sam2_base import NO_OBJ_SCORE, SAM2Base
 from sam2.utils.misc import concat_points, fill_holes_in_mask_scores, load_video_frames
-from sam2.modeling.sam2_utils import (
-    get_1d_sine_pe,
-    get_next_point,
-    sample_box_points,
-    select_closest_cond_frames,
-)
-from sam2.utils.misc import concat_points
-from sam2.modeling.sam.lora import *
-import copy
 
-def get_iou(obj_mask, obj_gt, void_pixel=255):
-    obj_void = obj_gt == void_pixel
-    obj_void = ~obj_void
-    obj_gt = (obj_gt > 0) & (obj_gt != void_pixel)
-    intersection = (obj_mask * obj_gt * obj_void).sum()
-    pixel_sum = (obj_mask * obj_void).sum() + (obj_gt * obj_void).sum()
-    # handle edge cases without resorting to epsilon
-    if intersection == pixel_sum:
-        # both mask and gt have zero pixels in them
-        assert intersection == 0
-        return 1
-    return intersection / (pixel_sum - intersection)
 
 class SAM2VideoPredictor(SAM2Base):
     """The predictor class to handle user interactions and manage inference states."""
@@ -324,7 +303,6 @@ class SAM2VideoPredictor(SAM2Base):
         frame_idx,
         obj_id,
         mask,
-        run_mem_encoder=False
     ):
         """Add new mask to a frame."""
         obj_idx = self._obj_id_to_idx(inference_state, obj_id)
@@ -384,15 +362,10 @@ class SAM2VideoPredictor(SAM2Base):
             # at the beginning of `propagate_in_video` (after user finalize their clicks). This
             # allows us to enforce non-overlapping constraints on all objects before encoding
             # them into memory.
-            run_mem_encoder=run_mem_encoder,
+            run_mem_encoder=False,
         )
         # Add the output to the output dict (to be used as future memory)
         obj_temp_output_dict[storage_key][frame_idx] = current_out
-        if run_mem_encoder:
-            obj_output_dict[storage_key][frame_idx] = current_out
-            # also add to cond frame outputs (this can make the user click more efficiently)
-            obj_output_dict["cond_frame_outputs"][frame_idx] = current_out
-
 
         # Resize the output mask to the original video resolution
         obj_ids = inference_state["obj_ids"]
@@ -657,102 +630,6 @@ class SAM2VideoPredictor(SAM2Base):
             yield frame_idx, obj_ids, video_res_masks
 
     @torch.inference_mode()
-    def propagate_to_frame(
-        self,
-        inference_state,
-        frame_idx,
-    ):
-        """
-        Propagate the tracking to a specific frame. This is useful for frame-by-frame
-        tracking controlled by video playback. Returns the masks for the specified frame.
-        """
-        # First, ensure we have consolidated outputs before tracking
-        self.propagate_in_video_preflight(inference_state)
-        
-        obj_ids = inference_state["obj_ids"]
-        batch_size = self._get_obj_num(inference_state)
-        
-        if batch_size == 0:
-            raise RuntimeError(
-                "No input points or masks are provided for any object; please add inputs first."
-            )
-        
-        # Check if this frame has already been tracked
-        obj_output_dict = inference_state["output_dict_per_obj"][0]
-        already_tracked = frame_idx in obj_output_dict["cond_frame_outputs"] or \
-                         frame_idx in obj_output_dict["non_cond_frame_outputs"]
-        
-        if already_tracked:
-            # Return cached result
-            pred_masks_per_obj = []
-            for obj_idx in range(batch_size):
-                obj_output_dict = inference_state["output_dict_per_obj"][obj_idx]
-                if frame_idx in obj_output_dict["cond_frame_outputs"]:
-                    current_out = obj_output_dict["cond_frame_outputs"][frame_idx]
-                else:
-                    current_out = obj_output_dict["non_cond_frame_outputs"][frame_idx]
-                pred_masks = current_out["pred_masks"].to(inference_state["device"], non_blocking=True)
-                pred_masks_per_obj.append(pred_masks)
-        else:
-            # Need to track this frame
-            pred_masks_per_obj = []
-            
-            # Determine the direction: track forward or backward from nearest tracked frame
-            # Find the nearest tracked frame
-            tracked_frames = set()
-            for obj_idx in range(batch_size):
-                obj_frames_tracked = inference_state["frames_tracked_per_obj"][obj_idx]
-                tracked_frames.update(obj_frames_tracked.keys())
-            
-            if not tracked_frames:
-                # No frames tracked yet, start from conditioning frame
-                reverse = False
-            else:
-                # Find nearest tracked frame
-                nearest_frame = min(tracked_frames, key=lambda x: abs(x - frame_idx))
-                reverse = frame_idx < nearest_frame
-            
-            for obj_idx in range(batch_size):
-                obj_output_dict = inference_state["output_dict_per_obj"][obj_idx]
-                
-                # Check if frame is a conditioning frame
-                if frame_idx in obj_output_dict["cond_frame_outputs"]:
-                    storage_key = "cond_frame_outputs"
-                    current_out = obj_output_dict[storage_key][frame_idx]
-                    device = inference_state["device"]
-                    pred_masks = current_out["pred_masks"].to(device, non_blocking=True)
-                else:
-                    storage_key = "non_cond_frame_outputs"
-                    current_out, pred_masks = self._run_single_frame_inference(
-                        inference_state=inference_state,
-                        output_dict=obj_output_dict,
-                        frame_idx=frame_idx,
-                        batch_size=1,
-                        is_init_cond_frame=False,
-                        point_inputs=None,
-                        mask_inputs=None,
-                        reverse=reverse,
-                        run_mem_encoder=True,
-                    )
-                    obj_output_dict[storage_key][frame_idx] = current_out
-                
-                inference_state["frames_tracked_per_obj"][obj_idx][frame_idx] = {
-                    "reverse": reverse
-                }
-                pred_masks_per_obj.append(pred_masks)
-        
-        # Resize output masks to original video resolution
-        if len(pred_masks_per_obj) > 1:
-            all_pred_masks = torch.cat(pred_masks_per_obj, dim=0)
-        else:
-            all_pred_masks = pred_masks_per_obj[0]
-        _, video_res_masks = self._get_orig_video_res_output(
-            inference_state, all_pred_masks
-        )
-        
-        return frame_idx, obj_ids, video_res_masks
-
-    @torch.inference_mode()
     def clear_all_prompts_in_frame(
         self, inference_state, frame_idx, obj_id, need_output=True
     ):
@@ -879,9 +756,6 @@ class SAM2VideoPredictor(SAM2Base):
             current_vision_pos_embeds,
             feat_sizes,
         ) = self._get_image_feature(inference_state, frame_idx, batch_size)
-        if self.LIT_LoRA_mode and frame_idx != self.temp_feat_for_lora["frame_idx"]:
-            self.temp_feat_for_lora["current_vision_feats"] = current_vision_feats
-            self.temp_feat_for_lora["feat_sizes"] = feat_sizes
 
         # point and mask should not appear as input simultaneously on the same frame
         assert point_inputs is None or mask_inputs is None
@@ -1098,295 +972,101 @@ class SAM2VideoPredictor(SAM2Base):
             for t in range(frame_idx_begin, frame_idx_end + 1):
                 non_cond_frame_outputs.pop(t, None)
 
-    def correct_by_iou(self,
+    @torch.inference_mode()
+    def propagate_to_frame(
+        self,
         inference_state,
         frame_idx,
-        obj_id,
-        cur_iou,
-        gt_mask,
-        pred_mask_tensor,
-        correct_threshold,
-        max_num_clicks=3,
-        ):
-        """
-        Correct the tracking results by a clicks to reach a certain IoU.
-        """
-        # gt_mask is [H, W] now, we need to convert it to [1, 1, H, W]
-        height, width = gt_mask.shape
-        input_gt_mask = ((gt_mask > 0) & (gt_mask != 255))
-        gt_mask_tensor = torch.from_numpy(input_gt_mask).unsqueeze(0).unsqueeze(0).to(pred_mask_tensor.device)
-        cur_num_clicks = 0
-        # print(f"frame: {frame_idx}, object: {obj_id}, cur_iou: {cur_iou}, cur_num_clicks: {cur_num_clicks}")
-        original_inference_state = inference_state.copy()
-        while cur_iou < correct_threshold and cur_num_clicks < max_num_clicks:
-            new_points, new_labels = get_next_point(
-                gt_masks=gt_mask_tensor,
-                pred_masks=pred_mask_tensor,
-                method="center"
-            )
-            _, _, video_res_masks = self.add_new_points_or_box(
-                inference_state=inference_state,
-                frame_idx=frame_idx,
-                obj_id=obj_id,
-                points=new_points,
-                labels=new_labels,
-            )
-            pred_mask_tensor = video_res_masks > 0
-            point_res_mask = (video_res_masks[0] > 0).cpu().numpy().reshape(height, width)
-            cur_iou = get_iou(point_res_mask, gt_mask)
-            cur_num_clicks += 1
-            # print(f"frame: {frame_idx}, object: {obj_id}, cur_iou: {cur_iou}, cur_num_clicks: {cur_num_clicks}")
-            if cur_iou >= correct_threshold:
-                break
-        if cur_iou < correct_threshold:
-            # add new mask
-            _, _, video_res_masks = self.add_new_mask(
-                inference_state=original_inference_state,
-                frame_idx=frame_idx,
-                obj_id=obj_id,
-                mask=input_gt_mask,
-                run_mem_encoder=True
-            )
-            correct_type = "mask"
-            cur_iou = 1
-        else:
-            correct_type = "point"
-            self.propagate_in_video_preflight(inference_state)
-        output = {
-            'correct_type': correct_type,
-            'correct_num_clicks': cur_num_clicks,
-            'correct_iou': cur_iou,
-            'correct_res_mask': video_res_masks,
-        }
-        return output
-    
-    def reset_lora(self):
-        self.temp_feat_for_lora = {
-            "frame_idx": -1,
-            "current_vision_feats": None,
-            "feat_sizes": None,
-            "high_res_features": None,
-            "pix_feat_with_mem": None,
-        }
-        self.positional_encodings_for_lora = self.sam_prompt_encoder.get_dense_pe()
-        self.sparse_embeddings_for_lora = None
-        self.dense_embeddings_for_lora = None
-        self.correction_buff = []
-        self.correction_buff_moe = {}
-        self.trained_lora = False
-        self.multi_lora = []
-        self.moe_user_dict = {}
-        self.training_time = {'train_new': {}, 'finetune': {}}
-        self.inference_time = {}
-
-    def freeze_non_lora(self, model):
-        for name, param in model.named_parameters():
-            if "lora_A" in name or "lora_B" in name:
-                param.requires_grad = True
-            else:
-                param.requires_grad = False
-
-    def convert_to_lora(self, module, target_module_names=("q_proj", "k_proj", "v_proj"), r=4, alpha=4, dropout=0.1):
-        for name, child in module.named_children():
-            if name in target_module_names and isinstance(child, nn.Linear):
-                new_layer = LoRALinear(
-                    child.in_features,
-                    child.out_features,
-                    rank=r,
-                    alpha=alpha,
-                    dropout=dropout,
-                    weight_init=child.weight.data.clone()
-                )
-                setattr(module, name, new_layer)
-            else:
-                self.convert_to_lora(child, target_module_names, r, alpha)
-
-    def train_lora(self, 
-        model, 
-        gt_mask, 
-        training_epoch=300, 
-        mode='init', 
-        model_idx=None,
-        replay=False,
     ):
-        # prepare the input for the LORA model
-        frame_idx = self.temp_feat_for_lora["frame_idx"]
-        high_res_features = self.temp_feat_for_lora["high_res_features"]
-        pix_feat_with_mem = self.temp_feat_for_lora["pix_feat_with_mem"]
-        if pix_feat_with_mem is None:
-            return False
-        device = pix_feat_with_mem.device
-        if self.sparse_embeddings_for_lora is None:
-            B = pix_feat_with_mem.size(0)
-            sam_point_coords = torch.zeros(B, 1, 2, device=device)
-            sam_point_labels = -torch.ones(B, 1, dtype=torch.int32, device=device)
-            sam_mask_prompt = None
-            self.sparse_embeddings_for_lora, self.dense_embeddings_for_lora = self.sam_prompt_encoder(
-                points=(sam_point_coords, sam_point_labels),
-                boxes=None,
-                masks=sam_mask_prompt,
+        """
+        Propagate the tracking to a specific frame. This is useful for frame-by-frame
+        tracking controlled by video playback. Returns the masks for the specified frame.
+        """
+        # First, ensure we have consolidated outputs before tracking
+        self.propagate_in_video_preflight(inference_state)
+        
+        obj_ids = inference_state["obj_ids"]
+        batch_size = self._get_obj_num(inference_state)
+        
+        if batch_size == 0:
+            raise RuntimeError(
+                "No input points or masks are provided for any object; please add inputs first."
             )
-        positional_encodings = self.positional_encodings_for_lora
-        sparse_embeddings = self.sparse_embeddings_for_lora
-        dense_embeddings = self.dense_embeddings_for_lora
-        gt_mask_resized = torch.tensor(gt_mask, dtype=torch.bool).float().to(device)[None, None]
-        gt_mask_resized = torch.nn.functional.interpolate(
-            gt_mask_resized,
-            size=(self.image_size, self.image_size),
-            align_corners=False,
-            mode="bilinear",
-            antialias=True,  # use antialias for downsampling
-        )
-        gt_mask_resized = (gt_mask_resized >= 0.5).float()
-        train_data_point = (
-            frame_idx,
-            pix_feat_with_mem,
-            positional_encodings,
-            sparse_embeddings,
-            dense_embeddings,
-            high_res_features,
-            gt_mask_resized,
-            gt_mask,
-        )
-        train_set = []
-        if mode == 'init':
-            optimizer = torch.optim.AdamW(
-                [p for p in model.parameters() if p.requires_grad],
-                lr=1e-4,
-                weight_decay=0,
-            )
-            train_set.append(train_data_point)
+        
+        # Check if this frame has already been tracked
+        obj_output_dict = inference_state["output_dict_per_obj"][0]
+        already_tracked = frame_idx in obj_output_dict["cond_frame_outputs"] or \
+                         frame_idx in obj_output_dict["non_cond_frame_outputs"]
+        
+        if already_tracked:
+            # Return cached result
+            pred_masks_per_obj = []
+            for obj_idx in range(batch_size):
+                obj_output_dict = inference_state["output_dict_per_obj"][obj_idx]
+                if frame_idx in obj_output_dict["cond_frame_outputs"]:
+                    current_out = obj_output_dict["cond_frame_outputs"][frame_idx]
+                else:
+                    current_out = obj_output_dict["non_cond_frame_outputs"][frame_idx]
+                pred_masks = current_out["pred_masks"].to(inference_state["device"], non_blocking=True)
+                pred_masks_per_obj.append(pred_masks)
+        else:
+            # Need to track this frame
+            pred_masks_per_obj = []
             
-        elif mode == 'finetune':
-            ## replay buffer
-            if replay:
-                replay_buffer = self.correction_buff_moe[model_idx]
-                # sort replay buffer by iou
-                replay_buffer = sorted(replay_buffer, key=lambda x: x[8], reverse=True)
-                train_set = replay_buffer[:5] + [train_data_point]
+            # Determine the direction: track forward or backward from nearest tracked frame
+            # Find the nearest tracked frame
+            tracked_frames = set()
+            for obj_idx in range(batch_size):
+                obj_frames_tracked = inference_state["frames_tracked_per_obj"][obj_idx]
+                tracked_frames.update(obj_frames_tracked.keys())
+            
+            if not tracked_frames:
+                # No frames tracked yet, start from conditioning frame
+                reverse = False
             else:
-                train_set = [train_data_point]
-            optimizer = torch.optim.AdamW(
-                [p for p in model.parameters() if p.requires_grad],
-                lr=5e-5,  # smaller LR for fine-tuning
-                weight_decay=0,
-            )
-        _, best_val_iou = train_with_random_split_each_epoch(
-            model=model,
-            full_dataset=train_set,
-            optimizer=optimizer,
-            loss_fn=loss_fn,
-            device=device,
-            max_epochs=training_epoch
+                # Find nearest tracked frame
+                nearest_frame = min(tracked_frames, key=lambda x: abs(x - frame_idx))
+                reverse = frame_idx < nearest_frame
+            
+            for obj_idx in range(batch_size):
+                obj_output_dict = inference_state["output_dict_per_obj"][obj_idx]
+                
+                # Check if frame is a conditioning frame
+                if frame_idx in obj_output_dict["cond_frame_outputs"]:
+                    storage_key = "cond_frame_outputs"
+                    current_out = obj_output_dict[storage_key][frame_idx]
+                    device = inference_state["device"]
+                    pred_masks = current_out["pred_masks"].to(device, non_blocking=True)
+                else:
+                    storage_key = "non_cond_frame_outputs"
+                    current_out, pred_masks = self._run_single_frame_inference(
+                        inference_state=inference_state,
+                        output_dict=obj_output_dict,
+                        frame_idx=frame_idx,
+                        batch_size=1,
+                        is_init_cond_frame=False,
+                        point_inputs=None,
+                        mask_inputs=None,
+                        reverse=reverse,
+                        run_mem_encoder=True,
+                    )
+                    obj_output_dict[storage_key][frame_idx] = current_out
+                
+                inference_state["frames_tracked_per_obj"][obj_idx][frame_idx] = {
+                    "reverse": reverse
+                }
+                pred_masks_per_obj.append(pred_masks)
+        
+        # Resize output masks to original video resolution
+        if len(pred_masks_per_obj) > 1:
+            all_pred_masks = torch.cat(pred_masks_per_obj, dim=0)
+        else:
+            all_pred_masks = pred_masks_per_obj[0]
+        _, video_res_masks = self._get_orig_video_res_output(
+            inference_state, all_pred_masks
         )
-        buffer_data_point = (
-            frame_idx,
-            pix_feat_with_mem,
-            positional_encodings,
-            sparse_embeddings,
-            dense_embeddings,
-            high_res_features,
-            gt_mask_resized,
-            gt_mask,
-            best_val_iou,
-        )
-        if mode == 'init':
-            self.multi_lora.append(model)
-            self.correction_buff_moe[len(self.correction_buff_moe)] = [buffer_data_point]
-        if mode == 'finetune':
-            self.correction_buff_moe[model_idx].append(buffer_data_point)
-        self.trained_lora = True
-        return True
-
-    @torch.inference_mode()
-    def lora_predict(self, inference_state, frame_idx, gt_mask, correction_threshold=0.5):
-        best_lora_iou = -1
-        best_lora_idx = -1
-        successful_predict = False
-        pix_feat_with_mem = self.temp_feat_for_lora["pix_feat_with_mem"]
-        positional_encodings = self.positional_encodings_for_lora
-        sparse_embeddings = self.sparse_embeddings_for_lora
-        dense_embeddings = self.dense_embeddings_for_lora
-        high_res_features = self.temp_feat_for_lora["high_res_features"]
-        for lora_idx, mask_decoder_lora in enumerate(self.multi_lora):
-            (
-                low_res_masks_lora,
-                high_res_masks_lora,
-                object_score_logits_lora,
-                # sam_output_tokens,
-                lora_iou,
-                lora_predicted_mask_score
-            ) = predict(
-                model=mask_decoder_lora,
-                pix_feat_with_mem=pix_feat_with_mem,
-                image_pe=positional_encodings,
-                sparse_embeddings=sparse_embeddings,
-                dense_embeddings=dense_embeddings,
-                high_res_features=high_res_features,
-                image_size=self.image_size,
-                original_gt_mask=gt_mask
-            )
-            if lora_iou > best_lora_iou:
-                low_res_masks_best = low_res_masks_lora
-                high_res_masks_best = high_res_masks_lora
-                object_score_logits_best = object_score_logits_lora
-                best_lora_predicted_mask_score = lora_predicted_mask_score
-                # best_sam_output_tokens = sam_output_tokens
-                best_lora_iou = lora_iou
-                best_lora_idx = lora_idx
-        # encode the memory and change the inference_state output
-        if best_lora_iou > correction_threshold:
-            successful_predict = True
-            # encode to the memory
-            maskmem_features, maskmem_pos_enc = self._encode_new_memory(
-                current_vision_feats=self.temp_feat_for_lora["current_vision_feats"],
-                feat_sizes=self.temp_feat_for_lora["feat_sizes"],
-                pred_masks_high_res=high_res_masks_best,
-                object_score_logits=object_score_logits_best,
-                is_mask_from_pts=False,
-            )
-            storage_device = inference_state["storage_device"]
-            maskmem_features = maskmem_features.to(torch.bfloat16)
-            maskmem_features = maskmem_features.to(storage_device, non_blocking=True)
-            # "maskmem_pos_enc" is the same across frames, so we only need to store one copy of it
-            maskmem_pos_enc = self._get_maskmem_pos_enc(
-                inference_state, {"maskmem_pos_enc": maskmem_pos_enc}
-            )
-            # change the inference_state output
-            compact_current_out = {
-                "maskmem_features": maskmem_features,
-                "maskmem_pos_enc": maskmem_pos_enc,
-                "pred_masks": low_res_masks_best,
-                "obj_ptr": self.temp_feat_for_lora['obj_ptr'],
-                "object_score_logits": object_score_logits_best,
-            }
-            obj_output_dict = inference_state["output_dict_per_obj"][0]
-            obj_output_dict["non_cond_frame_outputs"][frame_idx] = compact_current_out
-            # obj_output_dict["cond_frame_outputs"][frame_idx] = compact_current_out
-            # add to the replay buffer
-            with torch.inference_mode(False):
-                gt_mask_resized = torch.tensor(gt_mask, dtype=torch.bool).float().to(storage_device)[None, None]
-                gt_mask_resized = torch.nn.functional.interpolate(
-                    gt_mask_resized,
-                    size=(self.image_size, self.image_size),
-                    align_corners=False,
-                    mode="bilinear",
-                    antialias=True,  # use antialias for downsampling
-                )
-                gt_mask_resized = (gt_mask_resized >= 0.5).float()
-                buffer_data_point = (
-                    frame_idx,
-                    pix_feat_with_mem.clone(),     # normal tensor
-                    positional_encodings.clone(),
-                    sparse_embeddings.clone(),
-                    dense_embeddings.clone(),
-                    high_res_features,
-                    gt_mask_resized.clone(),
-                    gt_mask,  # if gt_mask is numpy
-                    best_lora_iou,
-                )
-                self.correction_buff_moe[best_lora_idx].append(buffer_data_point)
-        return successful_predict, best_lora_iou, best_lora_idx, best_lora_predicted_mask_score
+        
+        return frame_idx, obj_ids, video_res_masks
 
 
 class SAM2VideoPredictorVOS(SAM2VideoPredictor):

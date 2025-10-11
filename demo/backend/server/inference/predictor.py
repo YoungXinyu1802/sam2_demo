@@ -55,10 +55,11 @@ class InferenceAPI:
 
         self.session_states: Dict[str, Any] = {}
         self.score_thresh = 0
-        # LoRA training data: {session_id: {obj_id: [training_samples]}}
+        # LoRA mode flag
+        self.lit_lora_mode = False
+        # LoRA training data: {session_id: {obj_id: [gt_masks]}}
+        # Store GT masks for training, features are captured automatically by predictor
         self.lora_training_data: Dict[str, Dict[int, List]] = {}
-        # LoRA trained models: {session_id: {obj_id: trained_lora_model}}
-        self.lora_models: Dict[str, Dict[int, Any]] = {}
 
         if MODEL_SIZE == "tiny":
             checkpoint = Path(APP_ROOT) / "checkpoints/sam2.1_hiera_tiny.pt"
@@ -102,6 +103,21 @@ class InferenceAPI:
             model_cfg, checkpoint, device=device
         )
         self.inference_lock = Lock()
+
+    def enable_lora_mode(self):
+        """Enable LIT-LoRA mode in the predictor"""
+        if not self.lit_lora_mode:
+            logger.info("Enabling LIT-LoRA mode")
+            self.predictor.LIT_LoRA_mode = True
+            self.predictor.reset_lora()
+            self.lit_lora_mode = True
+            
+    def disable_lora_mode(self):
+        """Disable LIT-LoRA mode in the predictor"""
+        if self.lit_lora_mode:
+            logger.info("Disabling LIT-LoRA mode")
+            self.predictor.LIT_LoRA_mode = False
+            self.lit_lora_mode = False
 
     def autocast_context(self):
         if self.device.type == "cuda":
@@ -412,8 +428,8 @@ class InferenceAPI:
 
     def train_lora(self, request: TrainLoRARequest) -> TrainLoRAResponse:
         """
-        Add a training sample for LoRA fine-tuning. This collects corrected frames
-        to be used for training when the user requests it.
+        Add a training sample for LoRA fine-tuning. When LIT-LoRA mode is enabled,
+        this adds the corrected mask and triggers the predictor to capture features.
         """
         with self.autocast_context(), self.inference_lock:
             try:
@@ -424,6 +440,10 @@ class InferenceAPI:
                 logger.info(
                     f"Adding LoRA training sample for session {session_id}, obj {obj_id}, frame {frame_idx}"
                 )
+                
+                # Enable LoRA mode if not already enabled
+                if not self.lit_lora_mode:
+                    self.enable_lora_mode()
                 
                 # Initialize storage if needed
                 if session_id not in self.lora_training_data:
@@ -442,62 +462,22 @@ class InferenceAPI:
                 session = self.__get_session(session_id)
                 inference_state = session["state"]
                 
-                # Extract features for this frame and mask
-                # We need to get the embeddings from the predictor
-                with torch.no_grad():
-                    # Get the cached backbone output directly
-                    device = inference_state["device"]
-                    image = inference_state["images"][frame_idx].to(device).float().unsqueeze(0)
-                    
-                    # Check if features are cached
-                    cached_image, backbone_out = inference_state["cached_features"].get(
-                        frame_idx, (None, None)
-                    )
-                    if backbone_out is None:
-                        # Run forward pass if not cached
-                        backbone_out = self.predictor.forward_image(image)
-                    
-                    # Get the features we need for LoRA training
-                    pix_feat_with_mem = backbone_out["backbone_fpn"][0]  # First level features
-                    image_pe = backbone_out["vision_pos_enc"][0]  # Position encoding
-                    
-                    # Get sparse and dense embeddings from the mask
-                    # Convert mask to points for sparse embedding
-                    mask_tensor = torch.tensor(mask > 0, dtype=torch.float32, device=self.device)
-                    mask_tensor = mask_tensor.unsqueeze(0).unsqueeze(0)
-                    
-                    # Resize to match expected size (use video dimensions from inference state)
-                    H = inference_state["video_height"]
-                    W = inference_state["video_width"]
-                    mask_resized = F.interpolate(
-                        mask_tensor,
-                        size=(H, W),
-                        mode="nearest"
-                    )
-                    
-                    # Get prompt embeddings
-                    sparse_embeddings, dense_embeddings = self.predictor.sam_prompt_encoder(
-                        points=None,
-                        boxes=None,
-                        masks=mask_resized,
-                    )
-                    
-                    # Get high-res features (list of feature maps at different resolutions)
-                    high_res_features = backbone_out["backbone_fpn"][1:]
-                
-                # Store the training sample
-                training_sample = (
-                    frame_idx,
-                    pix_feat_with_mem.detach(),
-                    image_pe.detach(),
-                    sparse_embeddings.detach(),
-                    dense_embeddings.detach(),
-                    high_res_features,
-                    mask_resized.detach(),
-                    mask,  # original GT mask
+                # Add the mask to trigger feature capture in temp_feat_for_lora
+                # This populates the predictor's internal feature cache
+                input_mask = ((mask > 0) & (mask != 255)).astype(np.uint8)
+                _, _, _ = self.predictor.add_new_mask(
+                    inference_state=inference_state,
+                    frame_idx=frame_idx,
+                    obj_id=obj_id,
+                    mask=input_mask,
+                    run_mem_encoder=True
                 )
                 
-                self.lora_training_data[session_id][obj_id].append(training_sample)
+                # Store the GT mask for later training
+                self.lora_training_data[session_id][obj_id].append({
+                    'frame_idx': frame_idx,
+                    'gt_mask': mask
+                })
                 
                 num_samples = len(self.lora_training_data[session_id][obj_id])
                 logger.info(f"LoRA training sample added. Total samples: {num_samples}")
@@ -508,6 +488,8 @@ class InferenceAPI:
                 )
             except Exception as e:
                 logger.error(f"Error adding LoRA training sample: {e}")
+                import traceback
+                traceback.print_exc()
                 return TrainLoRAResponse(
                     success=False,
                     message=f"Error: {str(e)}"
@@ -518,6 +500,7 @@ class InferenceAPI:
     ) -> GenerateLoraCandidatesResponse:
         """
         Train LoRA on collected samples and generate mask candidates for a frame.
+        Uses the predictor's built-in LoRA methods following the LIT-LoRA workflow.
         """
         with self.autocast_context(), self.inference_lock:
             try:
@@ -540,98 +523,60 @@ class InferenceAPI:
                         candidates=[]
                     )
                 
-                # Import LoRA modules
-                from sam2.sam2_video_predictor_lora import (
-                    train_with_random_split_each_epoch,
-                    predict,
-                    loss_fn,
-                )
-                
-                # Get or create LoRA model
-                if session_id not in self.lora_models:
-                    self.lora_models[session_id] = {}
-                
-                if obj_id not in self.lora_models[session_id]:
-                    # Create a LoRA version of the mask decoder
-                    logger.info("Creating LoRA mask decoder")
-                    lora_mask_decoder = copy.deepcopy(self.predictor.sam_mask_decoder)
-                    lora_mask_decoder = lora_mask_decoder.to(self.device)
-                    
-                    # Train LoRA
-                    logger.info(f"Training LoRA with {len(self.lora_training_data[session_id][obj_id])} samples")
-                    optimizer = torch.optim.Adam(
-                        [p for p in lora_mask_decoder.parameters() if p.requires_grad],
-                        lr=1e-4
-                    )
-                    
-                    trained_model, best_iou = train_with_random_split_each_epoch(
-                        model=lora_mask_decoder,
-                        full_dataset=self.lora_training_data[session_id][obj_id],
-                        optimizer=optimizer,
-                        loss_fn=loss_fn,
-                        device=self.device,
-                        train_ratio=0.8,
-                        max_epochs=100,
-                        patience=10,
-                        batch_size=1,
-                    )
-                    
-                    self.lora_models[session_id][obj_id] = trained_model
-                    logger.info(f"LoRA training completed with best IoU: {best_iou:.4f}")
-                else:
-                    trained_model = self.lora_models[session_id][obj_id]
-                
-                # Generate predictions for the requested frame
                 session = self.__get_session(session_id)
                 inference_state = session["state"]
                 
-                with torch.no_grad():
-                    # Get the cached backbone output directly
-                    device = inference_state["device"]
-                    image = inference_state["images"][frame_idx].to(device).float().unsqueeze(0)
+                # Check if LoRA has been trained
+                if not hasattr(self.predictor, 'trained_lora') or not self.predictor.trained_lora:
+                    # Train LoRA on the first correction sample
+                    logger.info("Training initial LoRA model")
+                    first_sample = self.lora_training_data[session_id][obj_id][0]
+                    gt_mask = first_sample['gt_mask']
                     
-                    # Check if features are cached
-                    cached_image, backbone_out = inference_state["cached_features"].get(
-                        frame_idx, (None, None)
-                    )
-                    if backbone_out is None:
-                        # Run forward pass if not cached
-                        backbone_out = self.predictor.forward_image(image)
+                    # Create and train LoRA model
+                    mask_decoder_lora = copy.deepcopy(self.predictor.sam_mask_decoder)
+                    self.predictor.convert_to_lora(mask_decoder_lora.transformer)
+                    self.predictor.freeze_non_lora(mask_decoder_lora)
                     
-                    pix_feat_with_mem = backbone_out["backbone_fpn"][0]  # First level features
-                    image_pe = backbone_out["vision_pos_enc"][0]  # Position encoding
-                    
-                    # Get high-res features (list of feature maps at different resolutions)
-                    high_res_features = backbone_out["backbone_fpn"][1:]
-                    
-                    # Get the GT mask if available (for evaluation)
-                    H = inference_state["video_height"]
-                    W = inference_state["video_width"]
-                    original_gt_mask = np.zeros((H, W), dtype=np.uint8)
-                    
-                    # Use empty prompts to get automatic prediction
-                    sparse_embeddings, dense_embeddings = self.predictor.sam_prompt_encoder(
-                        points=None,
-                        boxes=None,
-                        masks=None,
+                    # Train the LoRA model
+                    training_success = self.predictor.train_lora(
+                        mask_decoder_lora, 
+                        gt_mask, 
+                        training_epoch=100,
+                        mode='init'
                     )
                     
-                    # Generate prediction using LoRA model
-                    output = predict(
-                        model=trained_model,
-                        pix_feat_with_mem=pix_feat_with_mem,
-                        image_pe=image_pe,
-                        sparse_embeddings=sparse_embeddings,
-                        dense_embeddings=dense_embeddings,
-                        high_res_features=high_res_features,
-                        image_size=H,
-                        original_gt_mask=original_gt_mask,
-                    )
+                    if not training_success:
+                        logger.warning("LoRA training failed")
+                        return GenerateLoraCandidatesResponse(
+                            frame_index=frame_idx,
+                            object_id=obj_id,
+                            candidates=[]
+                        )
                     
-                    low_res_masks, high_res_masks, obj_score, lora_iou, lora_mask_score = output
+                    logger.info("LoRA model trained successfully")
+                
+                # Use lora_predict to generate candidates
+                logger.info(f"Generating predictions using LoRA for frame {frame_idx}")
+                
+                # Create a dummy GT mask for the frame (used for evaluation)
+                H = inference_state["video_height"]
+                W = inference_state["video_width"]
+                dummy_gt_mask = np.zeros((H, W), dtype=np.uint8)
+                
+                # Use lora_predict to get predictions from all trained LoRA models
+                successful_predict, best_lora_iou, best_lora_idx, best_lora_predicted_mask_score = self.predictor.lora_predict(
+                    inference_state, 
+                    frame_idx, 
+                    dummy_gt_mask,
+                    correction_threshold=0.5  # Threshold for considering prediction successful
+                )
+                
+                if successful_predict:
+                    logger.info(f"LoRA prediction successful with IoU: {best_lora_iou}")
                     
                     # Convert to binary mask and encode as RLE
-                    lora_mask = (lora_mask_score > 0).squeeze().cpu().numpy().astype(np.uint8)
+                    lora_mask = (best_lora_predicted_mask_score > 0).squeeze().cpu().numpy().astype(np.uint8)
                     mask_rle = encode_masks(np.array(lora_mask, dtype=np.uint8, order="F"))
                     mask_rle["counts"] = mask_rle["counts"].decode()
                     
@@ -641,17 +586,24 @@ class InferenceAPI:
                                 size=mask_rle["size"],
                                 counts=mask_rle["counts"],
                             ),
-                            confidence=float(lora_iou),
+                            confidence=float(best_lora_iou),
                         )
                     ]
-                
-                logger.info(f"Generated {len(candidates)} LoRA candidates")
-                
-                return GenerateLoraCandidatesResponse(
-                    frame_index=frame_idx,
-                    object_id=obj_id,
-                    candidates=candidates,
-                )
+                    
+                    logger.info(f"Generated {len(candidates)} LoRA candidates")
+                    
+                    return GenerateLoraCandidatesResponse(
+                        frame_index=frame_idx,
+                        object_id=obj_id,
+                        candidates=candidates,
+                    )
+                else:
+                    logger.warning("LoRA prediction was not successful")
+                    return GenerateLoraCandidatesResponse(
+                        frame_index=frame_idx,
+                        object_id=obj_id,
+                        candidates=[],
+                    )
                 
             except Exception as e:
                 logger.error(f"Error generating LoRA candidates: {e}")

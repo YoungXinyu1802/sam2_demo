@@ -180,7 +180,6 @@ class SAM2Base(torch.nn.Module):
 
         self._build_sam_heads()
         self.max_cond_frames_in_attn = max_cond_frames_in_attn
-        self.LIT_LoRA_mode = False
 
         # Model compilation
         if compile_image_encoder:
@@ -784,14 +783,6 @@ class SAM2Base(torch.nn.Module):
                 high_res_features=high_res_features,
                 multimask_output=multimask_output,
             )
-            
-            if self.LIT_LoRA_mode:
-                self.temp_feat_for_lora["frame_idx"] = frame_idx
-                self.temp_feat_for_lora["current_vision_feats"] = current_vision_feats
-                self.temp_feat_for_lora["feat_sizes"] = feat_sizes
-                self.temp_feat_for_lora["high_res_features"] = high_res_features
-                self.temp_feat_for_lora["pix_feat_with_mem"] = pix_feat
-                self.temp_feat_for_lora['obj_ptr'] = sam_outputs[5]
 
         return current_out, sam_outputs, high_res_features, pix_feat
 
