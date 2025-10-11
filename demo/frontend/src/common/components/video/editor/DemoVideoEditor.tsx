@@ -31,7 +31,6 @@ import VideoEditor from '@/common/components/video/editor/VideoEditor';
 import useResetDemoEditor from '@/common/components/video/editor/useResetEditor';
 import useVideo from '@/common/components/video/editor/useVideo';
 import InteractionLayer from '@/common/components/video/layers/InteractionLayer';
-import {LoRACandidatesLayer} from '@/common/components/video/layers/LoRACandidatesLayer';
 import {PointsLayer} from '@/common/components/video/layers/PointsLayer';
 import LoadingStateScreen from '@/common/loading/LoadingStateScreen';
 import UploadLoadingScreen from '@/common/loading/UploadLoadingScreen';
@@ -293,11 +292,6 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
           />
         </>
       )}
-      <LoRACandidatesLayer
-        key="lora-candidates-layer"
-        width={inputVideo.width}
-        height={inputVideo.height}
-      />
       {!isMobile && <MessagesSnackbar key="snackbar-layer" />}
     </>
   );

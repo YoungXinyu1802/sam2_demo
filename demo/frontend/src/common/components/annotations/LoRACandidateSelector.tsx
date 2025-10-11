@@ -45,7 +45,7 @@ export default function LoRACandidateSelector() {
       // Call the tracker method to apply the candidate
       const tracker = video.getWorker_ONLY_USE_WITH_CAUTION();
       
-      // Post message to worker to apply candidate
+      // Post message to worker to apply candidate AND clear candidates from video
       tracker.postMessage({
         action: 'applyLoraCandidate',
         objectId: candidateData.objectId,
@@ -62,8 +62,17 @@ export default function LoRACandidateSelector() {
 
   const handleRejectAll = useCallback(() => {
     Logger.info('Rejected all LoRA candidates');
+    
+    // Clear candidates from video overlay
+    const tracker = video?.getWorker_ONLY_USE_WITH_CAUTION();
+    if (tracker) {
+      tracker.postMessage({
+        action: 'clearLoraCandidates',
+      });
+    }
+    
     setCandidateData(null);
-  }, [setCandidateData]);
+  }, [video, setCandidateData]);
 
   if (!candidateData || candidateData.candidates.length === 0) {
     return null;

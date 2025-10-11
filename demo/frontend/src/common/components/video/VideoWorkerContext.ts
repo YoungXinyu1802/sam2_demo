@@ -109,6 +109,7 @@ export default class VideoWorkerContext {
 
   private _effects: Effect[];
   private _tracklets: Tracklet[] = [];
+  private _loraCandidateMasks: Array<{mask: RLEObject; color: string}> = [];
 
   public get width(): number {
     return this._decodedVideo?.width ?? 0;
@@ -511,11 +512,37 @@ export default class VideoWorkerContext {
   }
 
   public sendLoraCandidates(candidateData: any): void {
-    // Send candidates to main thread for UI display
+    // Define colors for candidates (matching the selector colors)
+    const CANDIDATE_COLORS = [
+      '#FF6B6B', // Red
+      '#4ECDC4', // Cyan
+      '#45B7D1', // Blue
+      '#FFA07A', // Light Salmon
+      '#98D8C8', // Mint
+      '#F7DC6F', // Yellow
+      '#BB8FCE', // Purple
+      '#85C1E2', // Sky Blue
+    ];
+    
+    // Store candidate masks for rendering (they'll flow through the WebGL pipeline)
+    this._loraCandidateMasks = candidateData.candidates.map((candidate: any, idx: number) => ({
+      mask: candidate.mask as RLEObject,
+      color: CANDIDATE_COLORS[idx % CANDIDATE_COLORS.length],
+    }));
+    
+    // Trigger a redraw to show the candidates
+    this._drawFrame();
+    
+    // Send candidates to main thread for UI display (selector buttons)
     self.postMessage({
       action: 'loraCandidatesGenerated',
       data: candidateData,
     });
+  }
+  
+  public clearLoraCandidates(): void {
+    this._loraCandidateMasks = [];
+    this._drawFrame();
   }
 
   public clearTrackletMasks(tracklet: Tracklet): void {
@@ -690,7 +717,17 @@ export default class VideoWorkerContext {
           bitmap: data as RLEObject,
         };
       });
-      const effectMasks = await Promise.all(effectMaskPromises);
+      
+      // Add LoRA candidate masks (they render through the same pipeline as regular masks)
+      const loraCandidatePromises = this._loraCandidateMasks.map(async ({mask, color}) => {
+        colors.push(color);
+        return {
+          bounds: [[0, 0], [this.width, this.height]] as [[number, number], [number, number]],
+          bitmap: mask,
+        };
+      });
+      
+      const effectMasks = await Promise.all([...effectMaskPromises, ...loraCandidatePromises]);
 
       this._stats.maskBmp?.end();
 

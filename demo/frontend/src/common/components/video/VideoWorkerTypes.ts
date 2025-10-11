@@ -73,6 +73,8 @@ export type EncodeVideoRequest = Request<'encode', unknown>;
 
 export type EnableStatsRequest = Request<'enableStats', unknown>;
 
+export type ClearLoraCandidatesRequest = Request<'clearLoraCandidates', unknown>;
+
 export type VideoWorkerRequest =
   | SetCanvasRequest
   | SetSourceRequest
@@ -83,7 +85,8 @@ export type VideoWorkerRequest =
   | FilmstripRequest
   | SetEffectRequest
   | EncodeVideoRequest
-  | EnableStatsRequest;
+  | EnableStatsRequest
+  | ClearLoraCandidatesRequest;
 
 export type VideoWorkerRequestMessageEvent = MessageEvent<VideoWorkerRequest>;
 

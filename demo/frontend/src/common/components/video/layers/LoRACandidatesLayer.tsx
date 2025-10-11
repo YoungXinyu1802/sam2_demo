@@ -75,7 +75,10 @@ export function LoRACandidatesLayer({width, height}: Props) {
         const maskData = decodedMask.data as Uint8Array;
         const [maskHeight, maskWidth] = decodedMask.shape;
         
-        console.log(`[LoRA Candidate ${idx}] Mask dimensions: ${maskWidth}x${maskHeight}, Canvas: ${width}x${height}`);
+        console.log(`[LoRA Candidate ${idx}]`);
+        console.log(`  - RLE size from backend: [${maskRLE.size[0]}, ${maskRLE.size[1]}]`);
+        console.log(`  - Decoded shape: [${maskHeight}, ${maskWidth}]`);
+        console.log(`  - Canvas (width x height): ${width} x ${height}`);
 
         // Parse the color
         const color = CANDIDATE_COLORS[idx % CANDIDATE_COLORS.length];
@@ -83,59 +86,65 @@ export function LoRACandidatesLayer({width, height}: Props) {
         const g = parseInt(color.slice(3, 5), 16);
         const b = parseInt(color.slice(5, 7), 16);
 
-        // RLE masks are stored in column-major (Fortran) order where dimensions are [height, width]
-        // but the data is laid out as if width and height are swapped.
-        // Following the pattern from OverlayEffect.ts, we create ImageData with swapped dimensions
-        const imageData = ctx.createImageData(maskHeight, maskWidth);
+        // RLE masks are stored in column-major (Fortran) order.
+        // The decoded mask has shape [height, width] but the data array is in column-major format.
+        // This means: for pixel at (row y, col x) in the image, the index is: x * height + y
+        // We need to convert to row-major format for ImageData which expects: y * width + x
+        
+        const imageData = ctx.createImageData(maskWidth, maskHeight);
         const data = imageData.data;
 
-        // Fill the mask pixels with the color (semi-transparent)
-        // maskData is in column-major order, matching the swapped dimensions
-        for (let i = 0; i < maskData.length; i++) {
-          if (maskData[i] > 0) {
-            const pixelIdx = i * 4;
-            data[pixelIdx] = r;
-            data[pixelIdx + 1] = g;
-            data[pixelIdx + 2] = b;
-            data[pixelIdx + 3] = 120; // Semi-transparent (47% opacity)
+        // Convert from column-major (x * h + y) to row-major (y * w + x)
+        for (let y = 0; y < maskHeight; y++) {
+          for (let x = 0; x < maskWidth; x++) {
+            // Column-major index (how maskData is stored)
+            const srcIdx = x * maskHeight + y;
+            // Row-major index (how ImageData expects it)
+            const dstIdx = (y * maskWidth + x) * 4;
+            
+            if (maskData[srcIdx] > 0) {
+              data[dstIdx] = r;
+              data[dstIdx + 1] = g;
+              data[dstIdx + 2] = b;
+              data[dstIdx + 3] = 120; // Semi-transparent
+            }
           }
         }
 
-        // Draw to canvas - need to match video dimensions
-        // Create a temporary canvas with the swapped dimensions
-        const tempCanvas = new OffscreenCanvas(maskHeight, maskWidth);
-        const tempCtx = tempCanvas.getContext('2d');
-        if (tempCtx) {
-          tempCtx.putImageData(imageData, 0, 0);
-          // Draw scaled to main canvas (width x height)
-          ctx.drawImage(tempCanvas, 0, 0, width, height);
+        // Draw to canvas - scale if dimensions don't match
+        if (maskWidth !== width || maskHeight !== height) {
+          const tempCanvas = new OffscreenCanvas(maskWidth, maskHeight);
+          const tempCtx = tempCanvas.getContext('2d');
+          if (tempCtx) {
+            tempCtx.putImageData(imageData, 0, 0);
+            ctx.drawImage(tempCanvas, 0, 0, width, height);
+          }
+        } else {
+          ctx.putImageData(imageData, 0, 0);
         }
 
-        // Draw candidate number on the mask (find centroid)
-        // Calculate centroid using the original mask data layout
+        // Calculate centroid for the number badge
         let sumX = 0;
         let sumY = 0;
         let count = 0;
 
-        // Iterate through mask with swapped dimensions
-        for (let i = 0; i < maskData.length; i++) {
-          if (maskData[i] > 0) {
-            // Convert linear index to x,y coordinates in swapped space
-            const x = Math.floor(i / maskWidth);
-            const y = i % maskWidth;
-            sumX += x;
-            sumY += y;
-            count++;
+        for (let y = 0; y < maskHeight; y++) {
+          for (let x = 0; x < maskWidth; x++) {
+            const srcIdx = x * maskHeight + y;
+            if (maskData[srcIdx] > 0) {
+              sumX += x;
+              sumY += y;
+              count++;
+            }
           }
         }
 
         if (count > 0) {
-          // Calculate centroid in mask coordinates, then scale to canvas
+          // Calculate centroid and scale to canvas coordinates
           const maskCentroidX = sumX / count;
           const maskCentroidY = sumY / count;
-          // Scale from swapped mask dimensions (maskHeight x maskWidth) to canvas (width x height)
-          const scaleX = width / maskHeight;
-          const scaleY = height / maskWidth;
+          const scaleX = width / maskWidth;
+          const scaleY = height / maskHeight;
           const centroidX = Math.floor(maskCentroidX * scaleX);
           const centroidY = Math.floor(maskCentroidY * scaleY);
 

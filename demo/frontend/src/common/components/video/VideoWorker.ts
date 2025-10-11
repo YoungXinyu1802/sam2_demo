@@ -167,8 +167,13 @@ self.addEventListener(
           if (tracker && 'applyLoraCandidate' in tracker) {
             await (tracker as any).applyLoraCandidate(objectId, frameIndex, candidateIndex);
           }
+          // Clear the candidate overlays after applying
+          context.clearLoraCandidates();
           break;
         }
+        case 'clearLoraCandidates':
+          context.clearLoraCandidates();
+          break;
         case 'finishCorrection':
           tracker?.finishCorrection();
           break;
