@@ -348,6 +348,27 @@ export default forwardRef<VideoRef, Props>(function Video(
     };
   }, [bridge, reportError, setIsPlaying, setIsVideoLoading]);
 
+  // Handle keyboard navigation for frame-by-frame control
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      // Only handle arrow keys when video is paused
+      if (!isPlaying) {
+        if (event.key === 'ArrowLeft') {
+          event.preventDefault();
+          bridge.previousFrame();
+        } else if (event.key === 'ArrowRight') {
+          event.preventDefault();
+          bridge.nextFrame();
+        }
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [bridge, isPlaying]);
+
   return (
     <div
       {...stylex.props(containerStyle ?? styles.container)}

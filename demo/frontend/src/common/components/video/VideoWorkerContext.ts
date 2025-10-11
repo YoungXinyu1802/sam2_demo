@@ -106,6 +106,9 @@ export default class VideoWorkerContext {
   private _currentSegmetationPoint: EffectActionPoint | null = null;
   private _frameTrackingEnabled: boolean = false;
   private _onFrameCallback: ((frameIndex: number) => Promise<void>) | null = null;
+  private _lastTrackedFrame: number = -1;
+  private _lastTrackedTime: number = 0;
+  private _trackingFps: number = 5; // Sample at 5 fps for frame tracking
 
   private _effects: Effect[];
   private _tracklets: Tracklet[] = [];
@@ -222,7 +225,31 @@ export default class VideoWorkerContext {
     // Cancel any ongoing render
     this._cancelRender();
     this.updateFrameIndex(index);
-    this._playbackRAFHandle = requestAnimationFrame(this._drawFrame.bind(this));
+    
+    // If frame tracking is enabled and video is paused, track this frame
+    if (this._frameTrackingEnabled && !this._isPlaying && this._onFrameCallback) {
+      this._onFrameCallback(index).then(() => {
+        this._drawFrame();
+      });
+    } else {
+      this._playbackRAFHandle = requestAnimationFrame(this._drawFrame.bind(this));
+    }
+  }
+
+  public goToNextFrame(): void {
+    if (this._decodedVideo === null) {
+      return;
+    }
+    const nextFrame = Math.min(this._frameIndex + 1, this._decodedVideo.numFrames - 1);
+    this.goToFrame(nextFrame);
+  }
+
+  public goToPreviousFrame(): void {
+    if (this._decodedVideo === null) {
+      return;
+    }
+    const prevFrame = Math.max(this._frameIndex - 1, 0);
+    this.goToFrame(prevFrame);
   }
 
   public play(): void {
@@ -259,8 +286,18 @@ export default class VideoWorkerContext {
         this.updateFrameIndex(expectedFrame);
         
         // Call frame tracking callback if enabled and wait for it to complete
+        // Sample at _trackingFps (default 5 fps) to reduce computational load
         if (this._frameTrackingEnabled && this._onFrameCallback) {
-          await this._onFrameCallback(expectedFrame);
+          const currentTime = performance.now();
+          const timeSinceLastTrack = currentTime - this._lastTrackedTime;
+          const timePerTrackingFrame = 1000 / this._trackingFps;
+          
+          // Only track if enough time has passed or if this is a different frame
+          if (timeSinceLastTrack >= timePerTrackingFrame || this._lastTrackedFrame !== expectedFrame) {
+            this._lastTrackedFrame = expectedFrame;
+            this._lastTrackedTime = currentTime;
+            await this._onFrameCallback(expectedFrame);
+          }
         }
         
         // Check if we're still playing after the async tracking completes
@@ -555,6 +592,9 @@ export default class VideoWorkerContext {
 
   public enableFrameTracking(enabled: boolean): void {
     this._frameTrackingEnabled = enabled;
+    // Reset tracking state when enabling/disabling
+    this._lastTrackedFrame = -1;
+    this._lastTrackedTime = 0;
   }
 
   public setOnFrameCallback(callback: ((frameIndex: number) => Promise<void>) | null): void {

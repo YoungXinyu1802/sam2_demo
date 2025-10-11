@@ -69,6 +69,12 @@ self.addEventListener(
         case 'frameUpdate':
           context.goToFrame(event.data.index);
           break;
+        case 'nextFrame':
+          context.goToNextFrame();
+          break;
+        case 'previousFrame':
+          context.goToPreviousFrame();
+          break;
 
         // Filmstrip
         case 'filmstrip': {

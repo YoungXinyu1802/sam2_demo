@@ -53,6 +53,8 @@ export type FrameUpdateRequest = Request<
     index: number;
   }
 >;
+export type NextFrameRequest = Request<'nextFrame', unknown>;
+export type PreviousFrameRequest = Request<'previousFrame', unknown>;
 export type FilmstripRequest = Request<
   'filmstrip',
   {
@@ -82,6 +84,8 @@ export type VideoWorkerRequest =
   | PauseRequest
   | StopRequest
   | FrameUpdateRequest
+  | NextFrameRequest
+  | PreviousFrameRequest
   | FilmstripRequest
   | SetEffectRequest
   | EncodeVideoRequest
