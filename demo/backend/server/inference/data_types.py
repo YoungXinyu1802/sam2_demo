@@ -29,6 +29,7 @@ class StartSessionRequest(BaseRequest):
     type: str
     path: str
     session_id: Optional[str] = None
+    tracking_fps: Optional[int] = None
 
 
 @dataclass_json
@@ -297,6 +298,20 @@ class StartOverRequest(BaseRequest):
 @dataclass_json
 @dataclass
 class StartOverResponse:
+    success: bool
+    message: str
+
+
+@dataclass
+class ReinitializeSessionRequest(BaseRequest):
+    type: str
+    session_id: str
+    tracking_fps: int
+
+
+@dataclass_json
+@dataclass
+class ReinitializeSessionResponse:
     success: bool
     message: str
 

@@ -72,7 +72,7 @@ export interface ITracker {
   streamMasks(frameIndex: number): Promise<void>;
   abortStreamMasks(): void;
   trackFrame(frameIndex: number): Promise<void>;
-  enableFrameTracking(): void;
+  enableFrameTracking(): Promise<void>;
   disableFrameTracking(): void;
   setTrackingFps(fps: number): void;
   enableLITLoRAMode(): Promise<void>;
@@ -106,7 +106,7 @@ export abstract class Tracker implements ITracker {
   abstract streamMasks(frameIndex: number): Promise<void>;
   abstract abortStreamMasks(): void;
   abstract trackFrame(frameIndex: number): Promise<void>;
-  abstract enableFrameTracking(): void;
+  abstract enableFrameTracking(): Promise<void>;
   abstract disableFrameTracking(): void;
   abstract setTrackingFps(fps: number): void;
   abstract enableLITLoRAMode(): Promise<void>;

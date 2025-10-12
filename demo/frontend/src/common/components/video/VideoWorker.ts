@@ -157,7 +157,7 @@ self.addEventListener(
           break;
         }
         case 'enableFrameTracking':
-          tracker?.enableFrameTracking();
+          await tracker?.enableFrameTracking();
           break;
         case 'disableFrameTracking':
           tracker?.disableFrameTracking();

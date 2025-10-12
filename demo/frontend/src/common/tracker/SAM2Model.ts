@@ -640,10 +640,13 @@ export class SAM2Model extends Tracker {
     }
   }
 
-  public enableFrameTracking(): void {
+  public async enableFrameTracking(): Promise<void> {
     this._frameTrackingEnabled = true;
     this._context.enableFrameTracking(true);
     this._updateStreamingState('full');
+    
+    // Reinitialize session with sampled frames for better performance
+    await this._reinitializeSessionForTracking();
   }
 
   public disableFrameTracking(): void {
@@ -655,6 +658,46 @@ export class SAM2Model extends Tracker {
     console.log(`[SAM2Model] setTrackingFps called with fps=${fps}`);
     this._trackingFps = fps;
     console.log(`[SAM2Model] Tracking FPS set to ${fps}, _trackingFps is now ${this._trackingFps}`);
+  }
+
+  private async _reinitializeSessionForTracking(): Promise<void> {
+    const sessionId = this._session.id;
+    if (!sessionId) {
+      console.log(`[SAM2Model] No session ID, skipping reinitialization`);
+      return;
+    }
+
+    try {
+      console.log(`[SAM2Model] Reinitializing session for tracking FPS ${this._trackingFps}`);
+      
+      const url = `${this._endpoint}/reinitialize_for_tracking`;
+      const requestBody = {
+        session_id: sessionId,
+        tracking_fps: this._trackingFps,
+      };
+      
+      const headers: {[name: string]: string} = {
+        'Content-Type': 'application/json',
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+        headers,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[SAM2Model] Failed to reinitialize session: ${errorText}`);
+        return;
+      }
+      
+      const jsonResponse = await response.json();
+      console.log(`[SAM2Model] Session reinitialized: ${jsonResponse.message}`);
+      
+    } catch (error) {
+      console.error(`[SAM2Model] Error reinitializing session:`, error);
+    }
   }
 
   public async enableLITLoRAMode(): Promise<void> {

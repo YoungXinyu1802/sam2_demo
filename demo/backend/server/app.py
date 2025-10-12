@@ -27,6 +27,7 @@ from inference.data_types import (
     PropagateDataResponse,
     PropagateInVideoRequest,
     PropagateToFrameRequest,
+    ReinitializeSessionRequest,
     StartOverRequest,
     TrainLoRARequest,
 )
@@ -108,6 +109,20 @@ def propagate_to_frame() -> Response:
     )
     
     response = inference_api.propagate_to_frame(request=req)
+    return make_response(response.to_json(), 200)
+
+
+# TOOD: Protect route with ToS permission check
+@app.route("/reinitialize_for_tracking", methods=["POST"])
+def reinitialize_for_tracking() -> Response:
+    data = request.json
+    req = ReinitializeSessionRequest(
+        type="reinitialize_for_tracking",
+        session_id=data["session_id"],
+        tracking_fps=data["tracking_fps"],
+    )
+    
+    response = inference_api.reinitialize_for_tracking(request=req)
     return make_response(response.to_json(), 200)
 
 

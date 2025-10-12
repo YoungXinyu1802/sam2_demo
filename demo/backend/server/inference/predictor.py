@@ -32,6 +32,8 @@ from inference.data_types import (
     PropagateDataValue,
     PropagateInVideoRequest,
     PropagateToFrameRequest,
+    ReinitializeSessionRequest,
+    ReinitializeSessionResponse,
     RemoveObjectRequest,
     RemoveObjectResponse,
     StartSessionRequest,
@@ -218,18 +220,101 @@ class InferenceAPI:
                 from data.transcoder import get_video_metadata
                 video_metadata = get_video_metadata(request.path)
                 if video_metadata.fps and video_metadata.fps > 0:
-                    inference_state["video_fps"] = int(round(video_metadata.fps))
-                    logger.info(f"[InferenceAPI] Set video FPS to {inference_state['video_fps']} for session {session_id}")
+                    video_fps = int(round(video_metadata.fps))
+                    inference_state["video_fps"] = video_fps
+                    logger.info(f"[InferenceAPI] Set video FPS to {video_fps} for session {session_id}")
                 else:
+                    video_fps = 30
+                    inference_state["video_fps"] = video_fps
                     logger.warning(f"[InferenceAPI] Could not detect video FPS for session {session_id}, using default 30")
             except Exception as e:
+                video_fps = 30
+                inference_state["video_fps"] = video_fps
                 logger.warning(f"[InferenceAPI] Failed to get video FPS for session {session_id}: {e}, using default 30")
+            
+            # If tracking_fps is provided, reinitialize with sampled frames
+            if request.tracking_fps is not None:
+                logger.info(f"[InferenceAPI] Reinitializing with tracking FPS {request.tracking_fps} (video FPS {video_fps})")
+                inference_state = self.predictor.init_state(
+                    request.path,
+                    offload_video_to_cpu=offload_video_to_cpu,
+                    tracking_fps=request.tracking_fps,
+                    video_fps=video_fps,
+                )
+                # Update the session with the new inference state
+                inference_state["video_fps"] = video_fps  # Ensure video_fps is set in the new state
+            
+            # Store original video path for potential reinitialization
+            inference_state["original_video_path"] = request.path
             
             self.session_states[session_id] = {
                 "canceled": False,
                 "state": inference_state,
             }
             return StartSessionResponse(session_id=session_id)
+
+    def reinitialize_for_tracking(
+        self, request: "ReinitializeSessionRequest"
+    ) -> "ReinitializeSessionResponse":
+        """
+        Reinitialize a session with sampled frames for frame tracking.
+        Uses reset_state and init_state with tracking FPS.
+        """
+        with self.autocast_context(), self.inference_lock:
+            session_id = request.session_id
+            tracking_fps = request.tracking_fps
+            
+            logger.info(f"[InferenceAPI] Reinitializing session {session_id} for tracking FPS {tracking_fps}")
+            
+            try:
+                session = self.__get_session(session_id)
+                current_state = session["state"]
+                
+                # Get original video path and video FPS
+                video_path = current_state.get("original_video_path")
+                video_fps = current_state.get("video_fps", 30)
+                
+                if not video_path:
+                    logger.error(f"[InferenceAPI] No original video path found for session {session_id}")
+                    return ReinitializeSessionResponse(
+                        success=False,
+                        message="No original video path found"
+                    )
+                
+                # Reset the current state
+                logger.info(f"[InferenceAPI] Resetting state for session {session_id}")
+                self.predictor.reset_state(current_state)
+                
+                # Reinitialize with sampled frames
+                logger.info(f"[InferenceAPI] Reinitializing with {video_fps} FPS -> {tracking_fps} FPS sampling")
+                new_state = self.predictor.init_state(
+                    video_path,
+                    offload_video_to_cpu=current_state.get("offload_video_to_cpu", False),
+                    tracking_fps=tracking_fps,
+                    video_fps=video_fps,
+                )
+                
+                # Preserve important session state
+                new_state["video_fps"] = video_fps
+                new_state["original_video_path"] = video_path
+                new_state["offload_video_to_cpu"] = current_state.get("offload_video_to_cpu", False)
+                new_state["tracking_fps"] = tracking_fps
+                
+                # Update the session
+                session["state"] = new_state
+                
+                logger.info(f"[InferenceAPI] Session {session_id} reinitialized with {new_state['num_frames']} sampled frames")
+                return ReinitializeSessionResponse(
+                    success=True,
+                    message=f"Session reinitialized with {new_state['num_frames']} sampled frames"
+                )
+                
+            except Exception as e:
+                logger.error(f"[InferenceAPI] Failed to reinitialize session {session_id}: {e}")
+                return ReinitializeSessionResponse(
+                    success=False,
+                    message=f"Failed to reinitialize session: {str(e)}"
+                )
 
     def close_session(self, request: CloseSessionRequest) -> CloseSessionResponse:
         is_successful = self.__clear_session_state(request.session_id)
@@ -501,12 +586,11 @@ class InferenceAPI:
                 session = self.__get_session(session_id)
                 inference_state = session["state"]
             except RuntimeError as e:
-                logger.error(f"[InferenceAPI] Session error: {e}")
+                logger.warning(f"[InferenceAPI] Session not found for frame propagation: {e}")
+                logger.info(f"[InferenceAPI] Available sessions: {list(self.session_states.keys())}")
                 return PropagateDataResponse(
-                    success=False,
-                    message=f"Session error: {str(e)}",
-                    results=[],
                     frame_index=frame_idx,
+                    results=[],
                 )
             
             # Handle frame reindexing if tracking_fps is provided

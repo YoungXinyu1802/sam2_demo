@@ -50,6 +50,7 @@ export type StartSessionRequest = Request<
   'startSession',
   {
     videoUrl: string;
+    trackingFps?: number;
   }
 >;
 export type CloseSessionRequest = Request<'closeSession', unknown>;

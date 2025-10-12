@@ -66,16 +66,32 @@ class SAM2VideoPredictor(SAM2Base):
         offload_video_to_cpu=False,
         offload_state_to_cpu=False,
         async_loading_frames=False,
+        tracking_fps=None,
+        video_fps=None,
     ):
         """Initialize an inference state."""
         compute_device = self.device  # device of the model
-        images, video_height, video_width = load_video_frames(
+        
+        # Load all frames first
+        all_images, video_height, video_width = load_video_frames(
             video_path=video_path,
             image_size=self.image_size,
             offload_video_to_cpu=offload_video_to_cpu,
             async_loading_frames=async_loading_frames,
             compute_device=compute_device,
         )
+        
+        # If tracking_fps is specified, sample frames at the tracking rate
+        if tracking_fps is not None and video_fps is not None:
+            frame_interval = int(video_fps / tracking_fps)
+            print(f"[SAM2VideoPredictor] Sampling frames: {video_fps} FPS -> {tracking_fps} FPS, interval {frame_interval}")
+            print(f"[SAM2VideoPredictor] Original frames: {len(all_images)}, Sampled frames: {len(all_images[::frame_interval])}")
+            
+            # Sample frames at the specified interval
+            images = all_images[::frame_interval]
+        else:
+            # Use all frames if no tracking FPS specified
+            images = all_images
         inference_state = {}
         inference_state["images"] = images
         inference_state["num_frames"] = len(images)
