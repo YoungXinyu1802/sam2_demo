@@ -20,38 +20,27 @@ import useVideo from '@/common/components/video/editor/useVideo';
 import {
   frameTrackingEnabledAtom,
   streamingStateAtom,
-  trackletObjectsAtom,
 } from '@/demo/atoms';
 import {Renew, Stop} from '@carbon/icons-react';
 import {useAtom, useAtomValue} from 'jotai';
-import {useCallback, useEffect} from 'react';
+import {useCallback} from 'react';
 
 export default function FrameTrackingButton() {
   const video = useVideo();
   const {enqueueMessage} = useMessagesSnackbar();
   const streamingState = useAtomValue(streamingStateAtom);
-  const tracklets = useAtomValue(trackletObjectsAtom);
   const [isFrameTrackingEnabled, setIsFrameTrackingEnabled] = useAtom(
     frameTrackingEnabledAtom,
   );
 
-  const areObjectsInitialized = tracklets.some(
-    tracklet => tracklet.isInitialized,
-  );
+  // Note: Frame tracking can now be enabled before objects are initialized
 
   const isDisabled =
-    !areObjectsInitialized ||
     streamingState === 'requesting' ||
     streamingState === 'partial' ||
     streamingState === 'aborting';
 
-  // Reset frame tracking when switching videos or clearing points
-  useEffect(() => {
-    if (!areObjectsInitialized && isFrameTrackingEnabled) {
-      video?.disableFrameTracking();
-      setIsFrameTrackingEnabled(false);
-    }
-  }, [areObjectsInitialized, isFrameTrackingEnabled, video]);
+  // Note: Frame tracking can now be enabled before objects are initialized
 
   const handleToggleFrameTracking = useCallback(() => {
     if (isDisabled) {

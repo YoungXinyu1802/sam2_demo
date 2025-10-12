@@ -26,7 +26,7 @@ import {
   EFFECT_TOOLBAR_INDEX,
   OBJECT_TOOLBAR_INDEX,
 } from '@/common/components/toolbar/ToolbarConfig';
-import {streamingStateAtom} from '@/demo/atoms';
+import {sessionAtom, streamingStateAtom} from '@/demo/atoms';
 import {useAtomValue} from 'jotai';
 
 type Props = {
@@ -35,11 +35,15 @@ type Props = {
 
 export default function ObjectsToolbarBottomActions({onTabChange}: Props) {
   const streamingState = useAtomValue(streamingStateAtom);
+  const session = useAtomValue(sessionAtom);
 
   const isTrackingInProgress =
     streamingState !== 'none' && streamingState !== 'full';
 
   const isTrackingComplete = streamingState === 'full';
+  
+  // Show tracking buttons when there's an active session (not just when streaming)
+  const hasActiveSession = session !== null;
 
   function handleSwitchToEffectsTab() {
     onTabChange(EFFECT_TOOLBAR_INDEX);
@@ -50,8 +54,8 @@ export default function ObjectsToolbarBottomActions({onTabChange}: Props) {
       <ClearAllPointsInVideoButton
         onRestart={() => onTabChange(OBJECT_TOOLBAR_INDEX)}
       />
-      {/* Show both buttons when tracking is in progress OR when objects are available */}
-      {(isTrackingInProgress || streamingState !== 'none') && (
+      {/* Show tracking buttons when there's an active session */}
+      {hasActiveSession && (
         <>
           {isTrackingInProgress && <TrackAndPlayButton />}
           <FrameTrackingButton />

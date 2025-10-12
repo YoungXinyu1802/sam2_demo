@@ -20,7 +20,6 @@ import useVideo from '@/common/components/video/editor/useVideo';
 import {
   litLoRAModeEnabledAtom,
   streamingStateAtom,
-  trackletObjectsAtom,
 } from '@/demo/atoms';
 import {Analytics, ChartLineSmooth} from '@carbon/icons-react';
 import {useAtom, useAtomValue} from 'jotai';
@@ -30,17 +29,13 @@ export default function LITLoRAModeButton() {
   const video = useVideo();
   const {enqueueMessage} = useMessagesSnackbar();
   const streamingState = useAtomValue(streamingStateAtom);
-  const tracklets = useAtomValue(trackletObjectsAtom);
   const [isLITLoRAModeEnabled, setIsLITLoRAModeEnabled] = useAtom(
     litLoRAModeEnabledAtom,
   );
 
-  const areObjectsInitialized = tracklets.some(
-    tracklet => tracklet.isInitialized,
-  );
+  // Note: LoRA mode can now be enabled before objects are initialized
 
   const isDisabled =
-    !areObjectsInitialized ||
     streamingState === 'requesting' ||
     streamingState === 'partial' ||
     streamingState === 'aborting';

@@ -281,6 +281,18 @@ class InferenceAPI:
                         message="No original video path found"
                     )
                 
+                # Preserve existing object data before reinitializing
+                preserved_objects = {
+                    "obj_id_to_idx": current_state.get("obj_id_to_idx", {}).copy(),
+                    "obj_idx_to_id": current_state.get("obj_idx_to_id", {}).copy(),
+                    "obj_ids": current_state.get("obj_ids", []).copy(),
+                    "point_inputs_per_obj": {k: v.copy() for k, v in current_state.get("point_inputs_per_obj", {}).items()},
+                    "mask_inputs_per_obj": {k: v.copy() for k, v in current_state.get("mask_inputs_per_obj", {}).items()},
+                    "output_dict_per_obj": {k: {kk: vv.copy() if isinstance(vv, dict) else vv for kk, vv in v.items()} for k, v in current_state.get("output_dict_per_obj", {}).items()},
+                    "temp_output_dict_per_obj": {k: {kk: vv.copy() if isinstance(vv, dict) else vv for kk, vv in v.items()} for k, v in current_state.get("temp_output_dict_per_obj", {}).items()},
+                    "frames_tracked_per_obj": {k: v.copy() for k, v in current_state.get("frames_tracked_per_obj", {}).items()},
+                }
+                
                 # Reset the current state
                 logger.info(f"[InferenceAPI] Resetting state for session {session_id}")
                 self.predictor.reset_state(current_state)
@@ -293,6 +305,11 @@ class InferenceAPI:
                     tracking_fps=tracking_fps,
                     video_fps=video_fps,
                 )
+                
+                # Restore preserved object data
+                logger.info(f"[InferenceAPI] Restoring preserved object data for {len(preserved_objects['obj_ids'])} objects")
+                for key, value in preserved_objects.items():
+                    new_state[key] = value
                 
                 # Preserve important session state
                 new_state["video_fps"] = video_fps
