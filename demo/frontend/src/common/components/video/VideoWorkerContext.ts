@@ -109,20 +109,16 @@ export default class VideoWorkerContext {
   private _trackingFps: number = 5; // Sample at 5 fps for frame tracking
 
   /**
-   * Calculate if a frame index corresponds to a 5 FPS sampled frame based on video time
+   * Calculate if a frame index corresponds to a 5 FPS sampled frame (using frame-based logic to match navigation)
    */
   private _isSampledFrame(frameIndex: number): boolean {
     if (!this._decodedVideo) return false;
     
     const videoFps = this._decodedVideo.fps;
+    const frameInterval = Math.round(videoFps / this._trackingFps);
     
-    // Calculate which sampled frame index this corresponds to
-    const frameTime = frameIndex / videoFps;
-    const sampledFrameIndex = Math.floor(frameTime * this._trackingFps);
-    const expectedFrameIndex = Math.floor(sampledFrameIndex * videoFps / this._trackingFps);
-    
-    // Check if this frame is close to the expected sampled frame
-    return Math.abs(frameIndex - expectedFrameIndex) <= 1;
+    // Check if this frame is a 5 FPS sampled frame (same logic as navigation)
+    return frameIndex % frameInterval === 0;
   }
 
   private _effects: Effect[];
@@ -262,21 +258,18 @@ export default class VideoWorkerContext {
       return;
     }
     
+    // Calculate frame interval for 5 FPS sampling (original working logic)
     const videoFps = this._decodedVideo.fps;
-    const totalFrames = this._decodedVideo.numFrames;
-    const videoDurationSeconds = totalFrames / videoFps;
-    const totalSampledFrames = Math.floor(videoDurationSeconds * this._trackingFps);
+    const frameInterval = Math.round(videoFps / this._trackingFps);
     
-    // Calculate current time position and find next sampled frame
-    const currentTime = this._frameIndex / videoFps;
-    const currentSampledIndex = Math.floor(currentTime * this._trackingFps);
+    // Find the next 5 FPS sampled frame
+    const currentSampledIndex = Math.floor(this._frameIndex / frameInterval);
     const nextSampledIndex = currentSampledIndex + 1;
+    const maxSampledFrames = Math.floor(this._decodedVideo.numFrames / frameInterval);
     
-    if (nextSampledIndex < totalSampledFrames) {
-      // Calculate the frame index for the next sampled time
-      const nextTime = nextSampledIndex / this._trackingFps;
-      const nextFrame = Math.floor(nextTime * videoFps);
-      this.goToFrame(Math.min(nextFrame, totalFrames - 1));
+    if (nextSampledIndex < maxSampledFrames) {
+      const nextFrame = Math.min(nextSampledIndex * frameInterval, this._decodedVideo.numFrames - 1);
+      this.goToFrame(nextFrame);
     }
   }
 
@@ -285,18 +278,17 @@ export default class VideoWorkerContext {
       return;
     }
     
+    // Calculate frame interval for 5 FPS sampling (original working logic)
     const videoFps = this._decodedVideo.fps;
+    const frameInterval = Math.round(videoFps / this._trackingFps);
     
-    // Calculate current time position and find previous sampled frame
-    const currentTime = this._frameIndex / videoFps;
-    const currentSampledIndex = Math.floor(currentTime * this._trackingFps);
+    // Find the previous 5 FPS sampled frame
+    const currentSampledIndex = Math.floor(this._frameIndex / frameInterval);
     const prevSampledIndex = currentSampledIndex - 1;
     
     if (prevSampledIndex >= 0) {
-      // Calculate the frame index for the previous sampled time
-      const prevTime = prevSampledIndex / this._trackingFps;
-      const prevFrame = Math.floor(prevTime * videoFps);
-      this.goToFrame(Math.max(prevFrame, 0));
+      const prevFrame = Math.max(prevSampledIndex * frameInterval, 0);
+      this.goToFrame(prevFrame);
     }
   }
 
@@ -639,9 +631,9 @@ export default class VideoWorkerContext {
     if (enabled && this._decodedVideo) {
       const videoFps = this._decodedVideo.fps;
       const totalFrames = this._decodedVideo.numFrames;
-      const videoDurationSeconds = totalFrames / videoFps;
-      const sampledFrames = Math.floor(videoDurationSeconds * this._trackingFps);
-      console.log(`🎬 Frame-by-frame tracking enabled. Total frames: ${totalFrames} (Original), ${sampledFrames} (5 FPS time-based sampled)`);
+      const frameInterval = Math.round(videoFps / this._trackingFps);
+      const sampledFrames = Math.floor(totalFrames / frameInterval);
+      console.log(`🎬 Frame-by-frame tracking enabled. Total frames: ${totalFrames} (Original), ${sampledFrames} (5 FPS frame-based sampled)`);
       
       // Ensure video is paused when enabling frame tracking
       if (this._isPlaying) {
