@@ -170,6 +170,13 @@ export default class VideoWorkerContext {
     this._trackingFps = fps;
   }
 
+  /**
+   * Get the current tracking FPS
+   */
+  public getTrackingFps(): number {
+    return this._trackingFps;
+  }
+
   private _effects: Effect[];
   private _tracklets: Tracklet[] = [];
   private _loraCandidateMasks: Array<{mask: RLEObject; color: string}> = [];
@@ -290,7 +297,14 @@ export default class VideoWorkerContext {
     if (this._frameTrackingEnabled && !this._isPlaying && this._onFrameCallback && this._decodedVideo) {
       // Only track if this is a 5 FPS sampled frame based on video time
       if (this._isSampledFrame(index)) {
-        this._onFrameCallback(index).then(() => {
+        // Calculate reindexed frame number for frame-by-frame tracking
+        const videoFps = this._decodedVideo.fps;
+        const frameInterval = Math.round(videoFps / this._trackingFps);
+        const reindexedFrame = Math.floor(index / frameInterval);
+        
+        console.log(`[VideoWorkerContext] Paused frame tracking: frame ${index} -> reindexed ${reindexedFrame} (video ${videoFps} FPS, tracking ${this._trackingFps} FPS, interval ${frameInterval})`);
+        
+        this._onFrameCallback(reindexedFrame).then(() => {
           this._drawFrame();
         });
       } else {
@@ -379,8 +393,13 @@ export default class VideoWorkerContext {
         if (this._frameTrackingEnabled && this._onFrameCallback && this._decodedVideo) {
           // Only track if this is a sampled frame based on tracking FPS
           if (this._isSampledFrame(expectedFrame)) {
-            console.log(`[VideoWorkerContext] Triggering frame propagation for frame ${expectedFrame} (tracking at ${this._trackingFps} FPS)`);
-            await this._onFrameCallback(expectedFrame);
+            // Calculate reindexed frame number for frame-by-frame tracking
+            const videoFps = this._decodedVideo.fps;
+            const frameInterval = Math.round(videoFps / this._trackingFps);
+            const reindexedFrame = Math.floor(expectedFrame / frameInterval);
+            
+            console.log(`[VideoWorkerContext] Triggering frame propagation for frame ${expectedFrame} -> reindexed ${reindexedFrame} (video ${videoFps} FPS, tracking ${this._trackingFps} FPS, interval ${frameInterval})`);
+            await this._onFrameCallback(reindexedFrame);
           }
         }
         

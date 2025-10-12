@@ -87,6 +87,7 @@ export type TrackFrameRequest = Request<
   'trackFrame',
   {
     frameIndex: number;
+    trackingFps?: number;
   }
 >;
 export type EnableFrameTrackingRequest = Request<'enableFrameTracking', unknown>;

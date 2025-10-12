@@ -91,6 +91,8 @@ class SAM2VideoPredictor(SAM2Base):
         inference_state["video_height"] = video_height
         inference_state["video_width"] = video_width
         inference_state["device"] = compute_device
+        # Store video FPS for frame reindexing (default to 30 if not available)
+        inference_state["video_fps"] = 30  # This will be updated with actual video FPS from metadata
         if offload_state_to_cpu:
             inference_state["storage_device"] = torch.device("cpu")
         else:
@@ -665,7 +667,13 @@ class SAM2VideoPredictor(SAM2Base):
         """
         Propagate the tracking to a specific frame. This is useful for frame-by-frame
         tracking controlled by video playback. Returns the masks for the specified frame.
+        
+        Args:
+            inference_state: The inference state containing tracking information
+            frame_idx: The actual video frame index to track
         """
+        print(f"[SAM2VideoPredictor] Processing frame {frame_idx}")
+        
         # First, ensure we have consolidated outputs before tracking
         self.propagate_in_video_preflight(inference_state)
         

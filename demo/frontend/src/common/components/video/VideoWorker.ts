@@ -164,7 +164,10 @@ self.addEventListener(
           break;
         case 'setTrackingFps': {
           const {fps} = event.data;
+          console.log(`[VideoWorker] setTrackingFps called with fps=${fps}`);
           context.setTrackingFps(fps);
+          console.log(`[VideoWorker] Calling tracker?.setTrackingFps(${fps})`);
+          tracker?.setTrackingFps(fps);
           break;
         }
         case 'enableLITLoRAMode':

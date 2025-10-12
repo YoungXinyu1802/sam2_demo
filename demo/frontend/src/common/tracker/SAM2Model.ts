@@ -93,6 +93,7 @@ export class SAM2Model extends Tracker {
   private _streamingState: StreamingState = 'none';
   private _frameTrackingEnabled: boolean = false;
   private _litLoRAModeEnabled: boolean = false;
+  private _trackingFps: number = 5; // Default tracking FPS
 
   private _emptyMask: RLEObject | null = null;
 
@@ -115,6 +116,8 @@ export class SAM2Model extends Tracker {
     const maskCtx = this._maskCanvas.getContext('2d');
     invariant(maskCtx != null, 'context cannot be null');
     this._maskCtx = maskCtx;
+    
+    console.log(`[SAM2Model] Constructor: Initial _trackingFps = ${this._trackingFps}`);
   }
 
   public startSession(videoPath: string): Promise<void> {
@@ -139,6 +142,7 @@ export class SAM2Model extends Tracker {
           },
           onCompleted: response => {
             const {sessionId} = response.startSession;
+            console.log(`[SAM2Model] Session started with ID: ${sessionId}`);
             this._session.id = sessionId;
 
             this._sendResponse<SessionStartedResponse>('sessionStarted', {
@@ -558,7 +562,9 @@ export class SAM2Model extends Tracker {
 
   public async trackFrame(frameIndex: number): Promise<void> {
     const sessionId = this._session.id;
+    console.log(`[SAM2Model] trackFrame called with frameIndex=${frameIndex}, sessionId=${sessionId}`);
     if (sessionId === null) {
+      console.log(`[SAM2Model] No session ID, skipping trackFrame`);
       return;
     }
     
@@ -579,9 +585,17 @@ export class SAM2Model extends Tracker {
     
     try {
       const url = `${this._endpoint}/propagate_to_frame`;
+      
+      // Use stored tracking FPS
+      const trackingFps = this._trackingFps;
+      
+      console.log(`[SAM2Model] Debug: _trackingFps=${this._trackingFps}`);
+      console.log(`[SAM2Model] Sending trackFrame request: frameIndex=${frameIndex}, trackingFps=${trackingFps}`);
+      
       const requestBody = {
         session_id: sessionId,
         frame_index: frameIndex,
+        tracking_fps: trackingFps,
       };
       
       const headers: {[name: string]: string} = {
@@ -635,6 +649,12 @@ export class SAM2Model extends Tracker {
   public disableFrameTracking(): void {
     this._frameTrackingEnabled = false;
     this._context.enableFrameTracking(false);
+  }
+
+  public setTrackingFps(fps: number): void {
+    console.log(`[SAM2Model] setTrackingFps called with fps=${fps}`);
+    this._trackingFps = fps;
+    console.log(`[SAM2Model] Tracking FPS set to ${fps}, _trackingFps is now ${this._trackingFps}`);
   }
 
   public async enableLITLoRAMode(): Promise<void> {

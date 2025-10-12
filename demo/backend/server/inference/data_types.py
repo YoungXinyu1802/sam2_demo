@@ -126,6 +126,7 @@ class PropagateToFrameRequest(BaseRequest):
     type: str
     session_id: str
     frame_index: int
+    tracking_fps: Optional[int] = None
 
 
 @dataclass_json
