@@ -317,11 +317,9 @@ export default forwardRef<VideoRef, Props>(function Video(
       setIsPlaying(false);
     }
 
-    function onStreamingDone(event: StreamingStateUpdateEvent) {
-      // continue to play after streaming is done (state is "full")
-      if (event.state === 'full') {
-        bridge.play();
-      }
+    function onStreamingDone(_event: StreamingStateUpdateEvent) {
+      // Don't auto-play when streaming state becomes 'full'
+      // User should manually control playback
     }
 
     function onLoadStart() {

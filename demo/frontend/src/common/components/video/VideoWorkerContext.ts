@@ -106,9 +106,24 @@ export default class VideoWorkerContext {
   private _currentSegmetationPoint: EffectActionPoint | null = null;
   private _frameTrackingEnabled: boolean = false;
   private _onFrameCallback: ((frameIndex: number) => Promise<void>) | null = null;
-  private _lastTrackedFrame: number = -1;
-  private _lastTrackedTime: number = 0;
   private _trackingFps: number = 5; // Sample at 5 fps for frame tracking
+
+  /**
+   * Calculate if a frame index corresponds to a 5 FPS sampled frame based on video time
+   */
+  private _isSampledFrame(frameIndex: number): boolean {
+    if (!this._decodedVideo) return false;
+    
+    const videoFps = this._decodedVideo.fps;
+    
+    // Calculate which sampled frame index this corresponds to
+    const frameTime = frameIndex / videoFps;
+    const sampledFrameIndex = Math.floor(frameTime * this._trackingFps);
+    const expectedFrameIndex = Math.floor(sampledFrameIndex * videoFps / this._trackingFps);
+    
+    // Check if this frame is close to the expected sampled frame
+    return Math.abs(frameIndex - expectedFrameIndex) <= 1;
+  }
 
   private _effects: Effect[];
   private _tracklets: Tracklet[] = [];
@@ -226,11 +241,17 @@ export default class VideoWorkerContext {
     this._cancelRender();
     this.updateFrameIndex(index);
     
-    // If frame tracking is enabled and video is paused, track this frame
-    if (this._frameTrackingEnabled && !this._isPlaying && this._onFrameCallback) {
-      this._onFrameCallback(index).then(() => {
-        this._drawFrame();
-      });
+    // If frame tracking is enabled and video is paused, track this frame at 5 FPS sampling
+    if (this._frameTrackingEnabled && !this._isPlaying && this._onFrameCallback && this._decodedVideo) {
+      // Only track if this is a 5 FPS sampled frame based on video time
+      if (this._isSampledFrame(index)) {
+        this._onFrameCallback(index).then(() => {
+          this._drawFrame();
+        });
+      } else {
+        // Draw frame without tracking
+        this._playbackRAFHandle = requestAnimationFrame(this._drawFrame.bind(this));
+      }
     } else {
       this._playbackRAFHandle = requestAnimationFrame(this._drawFrame.bind(this));
     }
@@ -240,16 +261,43 @@ export default class VideoWorkerContext {
     if (this._decodedVideo === null) {
       return;
     }
-    const nextFrame = Math.min(this._frameIndex + 1, this._decodedVideo.numFrames - 1);
-    this.goToFrame(nextFrame);
+    
+    const videoFps = this._decodedVideo.fps;
+    const totalFrames = this._decodedVideo.numFrames;
+    const videoDurationSeconds = totalFrames / videoFps;
+    const totalSampledFrames = Math.floor(videoDurationSeconds * this._trackingFps);
+    
+    // Calculate current time position and find next sampled frame
+    const currentTime = this._frameIndex / videoFps;
+    const currentSampledIndex = Math.floor(currentTime * this._trackingFps);
+    const nextSampledIndex = currentSampledIndex + 1;
+    
+    if (nextSampledIndex < totalSampledFrames) {
+      // Calculate the frame index for the next sampled time
+      const nextTime = nextSampledIndex / this._trackingFps;
+      const nextFrame = Math.floor(nextTime * videoFps);
+      this.goToFrame(Math.min(nextFrame, totalFrames - 1));
+    }
   }
 
   public goToPreviousFrame(): void {
     if (this._decodedVideo === null) {
       return;
     }
-    const prevFrame = Math.max(this._frameIndex - 1, 0);
-    this.goToFrame(prevFrame);
+    
+    const videoFps = this._decodedVideo.fps;
+    
+    // Calculate current time position and find previous sampled frame
+    const currentTime = this._frameIndex / videoFps;
+    const currentSampledIndex = Math.floor(currentTime * this._trackingFps);
+    const prevSampledIndex = currentSampledIndex - 1;
+    
+    if (prevSampledIndex >= 0) {
+      // Calculate the frame index for the previous sampled time
+      const prevTime = prevSampledIndex / this._trackingFps;
+      const prevFrame = Math.floor(prevTime * videoFps);
+      this.goToFrame(Math.max(prevFrame, 0));
+    }
   }
 
   public play(): void {
@@ -287,15 +335,9 @@ export default class VideoWorkerContext {
         
         // Call frame tracking callback if enabled and wait for it to complete
         // Sample at _trackingFps (default 5 fps) to reduce computational load
-        if (this._frameTrackingEnabled && this._onFrameCallback) {
-          const currentTime = performance.now();
-          const timeSinceLastTrack = currentTime - this._lastTrackedTime;
-          const timePerTrackingFrame = 1000 / this._trackingFps;
-          
-          // Only track if enough time has passed or if this is a different frame
-          if (timeSinceLastTrack >= timePerTrackingFrame || this._lastTrackedFrame !== expectedFrame) {
-            this._lastTrackedFrame = expectedFrame;
-            this._lastTrackedTime = currentTime;
+        if (this._frameTrackingEnabled && this._onFrameCallback && this._decodedVideo) {
+          // Only track if this is a 5 FPS sampled frame based on video time
+          if (this._isSampledFrame(expectedFrame)) {
             await this._onFrameCallback(expectedFrame);
           }
         }
@@ -592,13 +634,19 @@ export default class VideoWorkerContext {
 
   public enableFrameTracking(enabled: boolean): void {
     this._frameTrackingEnabled = enabled;
-    // Reset tracking state when enabling/disabling
-    this._lastTrackedFrame = -1;
-    this._lastTrackedTime = 0;
     
     // Log total frames when enabling frame tracking
     if (enabled && this._decodedVideo) {
-      console.log(`🎬 Frame-by-frame tracking enabled. Total frames: ${this._decodedVideo.numFrames}`);
+      const videoFps = this._decodedVideo.fps;
+      const totalFrames = this._decodedVideo.numFrames;
+      const videoDurationSeconds = totalFrames / videoFps;
+      const sampledFrames = Math.floor(videoDurationSeconds * this._trackingFps);
+      console.log(`🎬 Frame-by-frame tracking enabled. Total frames: ${totalFrames} (Original), ${sampledFrames} (5 FPS time-based sampled)`);
+      
+      // Ensure video is paused when enabling frame tracking
+      if (this._isPlaying) {
+        this.pause();
+      }
     } else if (!enabled) {
       console.log('🎬 Frame-by-frame tracking disabled');
     }

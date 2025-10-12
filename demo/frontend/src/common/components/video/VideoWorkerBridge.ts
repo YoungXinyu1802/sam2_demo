@@ -58,8 +58,10 @@ import {
   FilmstripRequest,
   FilmstripResponse,
   FrameUpdateRequest,
+  NextFrameRequest,
   PauseRequest,
   PlayRequest,
+  PreviousFrameRequest,
   SetCanvasRequest,
   SetEffectRequest,
   SetSourceRequest,
@@ -294,13 +296,11 @@ export default class VideoWorkerBridge extends EventEmitter<VideoWorkerEventMap>
   }
 
   public previousFrame(): void {
-    const index = Math.max(0, this.frameIndex - 1);
-    this.goToFrame(index);
+    this.sendRequest<PreviousFrameRequest>('previousFrame');
   }
 
   public nextFrame(): void {
-    const index = Math.min(this.frameIndex + 1, this.numberOfFrames - 1);
-    this.goToFrame(index);
+    this.sendRequest<NextFrameRequest>('nextFrame');
   }
 
   public set frame(index: number) {
