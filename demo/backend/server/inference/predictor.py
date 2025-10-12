@@ -344,11 +344,21 @@ class InferenceAPI:
             session = self.__get_session(request.session_id)
             inference_state = session["state"]
 
-            frame_idx = request.frame_index
+            original_frame_idx = request.frame_index
             obj_id = request.object_id
             points = request.points
             labels = request.labels
             clear_old_points = request.clear_old_points
+
+            # Handle frame reindexing if tracking_fps is set (sampled frames)
+            frame_idx = original_frame_idx
+            if "tracking_fps" in inference_state and inference_state["tracking_fps"] is not None:
+                video_fps = inference_state.get("video_fps", 60)
+                tracking_fps = inference_state["tracking_fps"]
+                frame_interval = int(video_fps / tracking_fps)
+                # Convert original frame index to sampled frame index
+                frame_idx = original_frame_idx // frame_interval
+                logger.info(f"[InferenceAPI] Reindexing add_points: original frame {original_frame_idx} -> sampled frame {frame_idx} (tracking at {tracking_fps} FPS)")
 
             # add new prompts and instantly get the output on the same frame
             frame_idx, object_ids, masks = self.predictor.add_new_points_or_box(
@@ -368,7 +378,7 @@ class InferenceAPI:
             )
 
             return PropagateDataResponse(
-                frame_index=frame_idx,
+                frame_index=original_frame_idx,  # Return original frame index
                 results=rle_mask_list,
             )
 
@@ -380,7 +390,7 @@ class InferenceAPI:
         """
         with self.autocast_context(), self.inference_lock:
             session_id = request.session_id
-            frame_idx = request.frame_index
+            original_frame_idx = request.frame_index
             obj_id = request.object_id
             rle_mask = {
                 "counts": request.mask.counts,
@@ -389,11 +399,22 @@ class InferenceAPI:
 
             mask = decode_masks(rle_mask)
 
+            session = self.__get_session(session_id)
+            inference_state = session["state"]
+
+            # Handle frame reindexing if tracking_fps is set (sampled frames)
+            frame_idx = original_frame_idx
+            if "tracking_fps" in inference_state and inference_state["tracking_fps"] is not None:
+                video_fps = inference_state.get("video_fps", 60)
+                tracking_fps = inference_state["tracking_fps"]
+                frame_interval = int(video_fps / tracking_fps)
+                # Convert original frame index to sampled frame index
+                frame_idx = original_frame_idx // frame_interval
+                logger.info(f"[InferenceAPI] Reindexing add_mask: original frame {original_frame_idx} -> sampled frame {frame_idx} (tracking at {tracking_fps} FPS)")
+
             logger.info(
                 f"add mask on frame {frame_idx} in session {session_id}: {obj_id=}, {mask.shape=}"
             )
-            session = self.__get_session(session_id)
-            inference_state = session["state"]
 
             frame_idx, obj_ids, video_res_masks = self.model.add_new_mask(
                 inference_state=inference_state,
@@ -408,7 +429,7 @@ class InferenceAPI:
             )
 
             return PropagateDataResponse(
-                frame_index=frame_idx,
+                frame_index=original_frame_idx,  # Return original frame index
                 results=rle_mask_list,
             )
 
@@ -420,14 +441,25 @@ class InferenceAPI:
         """
         with self.autocast_context(), self.inference_lock:
             session_id = request.session_id
-            frame_idx = request.frame_index
+            original_frame_idx = request.frame_index
             obj_id = request.object_id
+
+            session = self.__get_session(session_id)
+            inference_state = session["state"]
+            
+            # Handle frame reindexing if tracking_fps is set (sampled frames)
+            frame_idx = original_frame_idx
+            if "tracking_fps" in inference_state and inference_state["tracking_fps"] is not None:
+                video_fps = inference_state.get("video_fps", 60)
+                tracking_fps = inference_state["tracking_fps"]
+                frame_interval = int(video_fps / tracking_fps)
+                # Convert original frame index to sampled frame index
+                frame_idx = original_frame_idx // frame_interval
+                logger.info(f"[InferenceAPI] Reindexing clear_points_in_frame: original frame {original_frame_idx} -> sampled frame {frame_idx} (tracking at {tracking_fps} FPS)")
 
             logger.info(
                 f"clear inputs on frame {frame_idx} in session {session_id}: {obj_id=}"
             )
-            session = self.__get_session(session_id)
-            inference_state = session["state"]
             frame_idx, obj_ids, video_res_masks = (
                 self.predictor.clear_all_prompts_in_frame(
                     inference_state, frame_idx, obj_id
@@ -440,7 +472,7 @@ class InferenceAPI:
             )
 
             return PropagateDataResponse(
-                frame_index=frame_idx,
+                frame_index=original_frame_idx,  # Return original frame index
                 results=rle_mask_list,
             )
 
@@ -650,10 +682,10 @@ class InferenceAPI:
             try:
                 session_id = request.session_id
                 obj_id = request.object_id
-                frame_idx = request.frame_index
+                original_frame_idx = request.frame_index
                 
                 logger.info(
-                    f"Adding LoRA training sample for session {session_id}, obj {obj_id}, frame {frame_idx}"
+                    f"Adding LoRA training sample for session {session_id}, obj {obj_id}, frame {original_frame_idx}"
                 )
                 
                 # Enable LoRA mode if not already enabled
@@ -676,6 +708,16 @@ class InferenceAPI:
                 # Get the session and inference state
                 session = self.__get_session(session_id)
                 inference_state = session["state"]
+                
+                # Handle frame reindexing if tracking_fps is set (sampled frames)
+                frame_idx = original_frame_idx
+                if "tracking_fps" in inference_state and inference_state["tracking_fps"] is not None:
+                    video_fps = inference_state.get("video_fps", 60)
+                    tracking_fps = inference_state["tracking_fps"]
+                    frame_interval = int(video_fps / tracking_fps)
+                    # Convert original frame index to sampled frame index
+                    frame_idx = original_frame_idx // frame_interval
+                    logger.info(f"[InferenceAPI] Reindexing train_lora: original frame {original_frame_idx} -> sampled frame {frame_idx} (tracking at {tracking_fps} FPS)")
                 
                 # First, propagate to this frame to ensure features are captured
                 # This is critical: propagate_to_frame runs _track_step which populates temp_feat_for_lora
@@ -764,7 +806,20 @@ class InferenceAPI:
             try:
                 session_id = request.session_id
                 obj_id = request.object_id
-                frame_idx = request.frame_index
+                original_frame_idx = request.frame_index
+                
+                session = self.__get_session(session_id)
+                inference_state = session["state"]
+                
+                # Handle frame reindexing if tracking_fps is set (sampled frames)
+                frame_idx = original_frame_idx
+                if "tracking_fps" in inference_state and inference_state["tracking_fps"] is not None:
+                    video_fps = inference_state.get("video_fps", 60)
+                    tracking_fps = inference_state["tracking_fps"]
+                    frame_interval = int(video_fps / tracking_fps)
+                    # Convert original frame index to sampled frame index
+                    frame_idx = original_frame_idx // frame_interval
+                    logger.info(f"[InferenceAPI] Reindexing generate_lora_candidates: original frame {original_frame_idx} -> sampled frame {frame_idx} (tracking at {tracking_fps} FPS)")
                 
                 logger.info(
                     f"Generating LoRA candidates for session {session_id}, obj {obj_id}, frame {frame_idx}"
@@ -774,13 +829,10 @@ class InferenceAPI:
                 if not hasattr(self.predictor, 'trained_lora') or not self.predictor.trained_lora:
                     logger.warning("No LoRA model trained yet. Please add corrections first via train_lora.")
                     return GenerateLoraCandidatesResponse(
-                        frame_index=frame_idx,
+                        frame_index=original_frame_idx,  # Return original frame index
                         object_id=obj_id,
                         candidates=[]
                     )
-                
-                session = self.__get_session(session_id)
-                inference_state = session["state"]
                 
                 # First, propagate to frame to capture features
                 try:
@@ -802,7 +854,7 @@ class InferenceAPI:
                 if not lora_candidates:
                     logger.warning("No LoRA candidates generated")
                     return GenerateLoraCandidatesResponse(
-                        frame_index=frame_idx,
+                        frame_index=original_frame_idx,  # Return original frame index
                         object_id=obj_id,
                         candidates=[]
                     )
@@ -832,7 +884,7 @@ class InferenceAPI:
                 logger.info(f"Generated {len(candidates)} LoRA candidates for user selection")
                 
                 return GenerateLoraCandidatesResponse(
-                    frame_index=frame_idx,
+                    frame_index=original_frame_idx,  # Return original frame index
                     object_id=obj_id,
                     candidates=candidates,
                 )
@@ -842,7 +894,7 @@ class InferenceAPI:
                 import traceback
                 traceback.print_exc()
                 return GenerateLoraCandidatesResponse(
-                    frame_index=frame_idx,
+                    frame_index=original_frame_idx,  # Return original frame index
                     object_id=obj_id,
                     candidates=[],
                 )
