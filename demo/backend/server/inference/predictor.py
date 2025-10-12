@@ -606,17 +606,13 @@ class InferenceAPI:
                 logger.warning(f"[InferenceAPI] Session not found for frame propagation: {e}")
                 logger.info(f"[InferenceAPI] Available sessions: {list(self.session_states.keys())}")
                 return PropagateDataResponse(
-                    frame_index=frame_idx,
+                    frame_index=request.frame_index,  # Return original frame index from request
                     results=[],
                 )
             
-            # Handle frame reindexing if tracking_fps is provided
-            if tracking_fps is not None:
-                video_fps = inference_state.get("video_fps", 60)  # Default to 60 FPS
-                frame_interval = int(video_fps / tracking_fps)
-                actual_frame_idx = frame_idx * frame_interval
-                logger.info(f"[InferenceAPI] Reindexed frame {frame_idx} -> actual video frame {actual_frame_idx} (tracking at {tracking_fps} FPS, interval {frame_interval})")
-                frame_idx = actual_frame_idx
+            # Note: Frame reindexing is now handled by the frontend
+            # The frontend sends the correct frame index for the sampled video
+            logger.info(f"[InferenceAPI] Debug: Processing frame {frame_idx} (tracking_fps = {tracking_fps})")
             
             try:
                 frame_idx, obj_ids, video_res_masks = self.predictor.propagate_to_frame(
@@ -634,9 +630,11 @@ class InferenceAPI:
                     f"[InferenceAPI] Frame propagation completed for frame {frame_idx}, "
                     f"processed {len(obj_ids)} objects, generated {len(rle_mask_list)} masks"
                 )
+                logger.info(f"[InferenceAPI] Debug: rle_mask_list = {rle_mask_list}")
+                logger.info(f"[InferenceAPI] Debug: response object_ids = {[item.object_id for item in rle_mask_list]}")
                 
                 return PropagateDataResponse(
-                    frame_index=frame_idx,
+                    frame_index=frame_idx,  # Return the frame index that was processed
                     results=rle_mask_list,
                 )
             except Exception as e:

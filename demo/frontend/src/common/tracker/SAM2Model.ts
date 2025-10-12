@@ -615,7 +615,9 @@ export class SAM2Model extends Tracker {
       }
       
       const jsonResponse = await response.json();
+      console.log(`[SAM2Model] Debug: Full response for frame ${frameIndex}:`, jsonResponse);
       const maskResults = jsonResponse.results;
+      console.log(`[SAM2Model] Debug: maskResults =`, maskResults);
       const rleMaskList = maskResults.map(
         (mask: {object_id: number; mask: RLEObject}) => {
           return {
@@ -625,12 +627,16 @@ export class SAM2Model extends Tracker {
         },
       );
       
+      // Store the mask at the current video frame, not the reindexed frame
       const result = {
-        frameIndex: jsonResponse.frame_index,
+        frameIndex: this._context.frameIndex, // Use current video frame, not reindexed frame
         rleMaskList,
       };
       
       console.log(`[SAM2Model] Frame propagation completed for frame ${frameIndex}, received ${rleMaskList.length} masks`);
+      console.log(`[SAM2Model] Debug: Processed result =`, result);
+      console.log(`[SAM2Model] Debug: Current video frame = ${this._context.frameIndex}`);
+      console.log(`[SAM2Model] Debug: Storing mask at current video frame ${this._context.frameIndex} instead of reindexed frame ${jsonResponse.frame_index}`);
       
       // Pass false for shouldGoToFrame to avoid disrupting the playback loop
       await this._updateTrackletMasks(result, false, false);
@@ -1038,8 +1044,12 @@ export class SAM2Model extends Tracker {
     const {frameIndex, rleMaskList} = data;
 
     // 1. parse and decode masks for all objects
+    console.log(`[SAM2Model] Debug: Processing ${rleMaskList.length} masks for frame ${frameIndex}`);
+    console.log(`[SAM2Model] Debug: Available tracklets:`, Object.keys(this._session.tracklets));
     for (const {objectId, rleMask} of rleMaskList) {
+      console.log(`[SAM2Model] Debug: Processing mask for objectId ${objectId}`);
       const track = this._session.tracklets[objectId];
+      console.log(`[SAM2Model] Debug: Found tracklet for objectId ${objectId}:`, track);
       const {size, counts} = rleMask;
       const rleObject: RLEObject = {
         size: [size[0], size[1]],
@@ -1062,6 +1072,7 @@ export class SAM2Model extends Tracker {
         isEmpty,
       } as const;
       track.masks[frameIndex] = mask;
+      console.log(`[SAM2Model] Debug: Stored mask at frame ${frameIndex} for tracklet ${objectId}`);
 
       if (updateThumbnails && !isEmpty) {
         const {ctx} = await this._compressMaskForCanvas(decodedMask);
@@ -1070,6 +1081,7 @@ export class SAM2Model extends Tracker {
       }
     }
 
+    console.log(`[SAM2Model] Debug: Calling updateTracklets with frameIndex=${frameIndex}, shouldGoToFrame=${shouldGoToFrame}`);
     this._context.updateTracklets(
       frameIndex,
       Object.values(this._session.tracklets),
@@ -1077,6 +1089,7 @@ export class SAM2Model extends Tracker {
     );
 
     // Notify the main thread
+    console.log(`[SAM2Model] Debug: Calling _updateTracklets to notify main thread`);
     this._updateTracklets();
   }
 
