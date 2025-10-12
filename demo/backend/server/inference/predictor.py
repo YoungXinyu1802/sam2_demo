@@ -477,7 +477,7 @@ class InferenceAPI:
             frame_idx = request.frame_index
             
             logger.info(
-                f"propagate to frame {frame_idx} in session {session_id}"
+                f"[InferenceAPI] Starting frame propagation to frame {frame_idx} in session {session_id}"
             )
             
             session = self.__get_session(session_id)
@@ -493,6 +493,11 @@ class InferenceAPI:
                 
                 rle_mask_list = self.__get_rle_mask_list(
                     object_ids=obj_ids, masks=masks_binary
+                )
+                
+                logger.info(
+                    f"[InferenceAPI] Frame propagation completed for frame {frame_idx}, "
+                    f"processed {len(obj_ids)} objects, generated {len(rle_mask_list)} masks"
                 )
                 
                 return PropagateDataResponse(

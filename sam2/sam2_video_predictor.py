@@ -684,6 +684,7 @@ class SAM2VideoPredictor(SAM2Base):
         
         if already_tracked:
             # Return cached result
+            print(f"[SAM2VideoPredictor] Frame {frame_idx} already tracked, returning cached result")
             pred_masks_per_obj = []
             for obj_idx in range(batch_size):
                 obj_output_dict = inference_state["output_dict_per_obj"][obj_idx]
@@ -695,6 +696,7 @@ class SAM2VideoPredictor(SAM2Base):
                 pred_masks_per_obj.append(pred_masks)
         else:
             # Need to track this frame
+            print(f"[SAM2VideoPredictor] Processing frame {frame_idx} for {batch_size} objects")
             pred_masks_per_obj = []
             
             # Determine the direction: track forward or backward from nearest tracked frame
@@ -750,6 +752,7 @@ class SAM2VideoPredictor(SAM2Base):
             inference_state, all_pred_masks
         )
         
+        print(f"[SAM2VideoPredictor] Frame {frame_idx} propagation completed, returning {len(obj_ids)} object masks")
         return frame_idx, obj_ids, video_res_masks
 
     @torch.inference_mode()

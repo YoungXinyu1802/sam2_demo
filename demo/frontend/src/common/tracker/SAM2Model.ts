@@ -575,6 +575,8 @@ export class SAM2Model extends Tracker {
       return;
     }
     
+    console.log(`[SAM2Model] Starting frame propagation for frame ${frameIndex} (session: ${sessionId})`);
+    
     try {
       const url = `${this._endpoint}/propagate_to_frame`;
       const requestBody = {
@@ -613,6 +615,8 @@ export class SAM2Model extends Tracker {
         frameIndex: jsonResponse.frame_index,
         rleMaskList,
       };
+      
+      console.log(`[SAM2Model] Frame propagation completed for frame ${frameIndex}, received ${rleMaskList.length} masks`);
       
       // Pass false for shouldGoToFrame to avoid disrupting the playback loop
       await this._updateTrackletMasks(result, false, false);

@@ -339,8 +339,9 @@ export default class VideoWorkerContext {
         // Call frame tracking callback if enabled and wait for it to complete
         // Sample at _trackingFps (default 5 fps) to reduce computational load
         if (this._frameTrackingEnabled && this._onFrameCallback && this._decodedVideo) {
-          // Only track if this is a 5 FPS sampled frame based on video time
+          // Only track if this is a sampled frame based on tracking FPS
           if (this._isSampledFrame(expectedFrame)) {
+            console.log(`[VideoWorkerContext] Triggering frame propagation for frame ${expectedFrame} (tracking at ${this._trackingFps} FPS)`);
             await this._onFrameCallback(expectedFrame);
           }
         }
