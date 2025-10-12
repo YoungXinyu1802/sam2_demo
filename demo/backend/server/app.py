@@ -27,6 +27,7 @@ from inference.data_types import (
     PropagateDataResponse,
     PropagateInVideoRequest,
     PropagateToFrameRequest,
+    StartOverRequest,
     TrainLoRARequest,
 )
 from inference.multipart import MultipartResponseBuilder
@@ -228,6 +229,31 @@ def apply_lora_candidate() -> Response:
         return make_response(response.to_json(), 200)
     except Exception as e:
         logger.error(f"Error in apply_lora_candidate: {e}", exc_info=True)
+        return make_response({"error": str(e)}, 500)
+
+
+# TOOD: Protect route with ToS permission check
+@app.route("/start_over", methods=["POST", "OPTIONS"])
+def start_over() -> Response:
+    if request.method == "OPTIONS":
+        # Handle CORS preflight
+        response = make_response("", 200)
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return response
+        
+    try:
+        data = request.json
+        logger.info(f"Received start_over request: session={data.get('session_id')}")
+        req = StartOverRequest(
+            type="start_over",
+            session_id=data["session_id"],
+        )
+        
+        response = inference_api.start_over_endpoint(request=req)
+        return make_response(response.to_json(), 200)
+    except Exception as e:
+        logger.error(f"Error in start_over: {e}", exc_info=True)
         return make_response({"error": str(e)}, 500)
 
 

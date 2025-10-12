@@ -56,6 +56,14 @@ export default function ClearAllPointsInVideoButton({onRestart}: Props) {
     if (isStreaming) {
       await video.abortStreamMasks();
     }
+    
+    // Reset LoRA states before clearing points
+    try {
+      await video.startOver();
+    } catch (error) {
+      console.error('Failed to reset LoRA states:', error);
+    }
+    
     const isSuccessful = await video.clearPointsInVideo();
     if (!isSuccessful) {
       await restartSession();

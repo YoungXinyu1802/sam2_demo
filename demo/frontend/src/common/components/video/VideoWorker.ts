@@ -180,6 +180,11 @@ self.addEventListener(
           context.clearLoraCandidates();
           break;
         }
+        case 'startOver':
+          tracker?.startOver();
+          // Clear the candidate overlays after starting over
+          context.clearLoraCandidates();
+          break;
         case 'clearLoraCandidates':
           context.clearLoraCandidates();
           break;

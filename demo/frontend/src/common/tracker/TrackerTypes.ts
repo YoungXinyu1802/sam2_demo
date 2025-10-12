@@ -102,6 +102,7 @@ export type ApplyLoraCandidateRequest = Request<
     candidateIndex: number;
   }
 >;
+export type StartOverRequest = Request<'startOver', unknown>;
 export type FinishCorrectionRequest = Request<'finishCorrection', unknown>;
 
 export type LogAnnotationsRequest = Request<'logAnnotations', unknown>;
@@ -124,6 +125,7 @@ export type TrackerRequest =
   | DisableLITLoRAModeRequest
   | GenerateLoraCandidatesRequest
   | ApplyLoraCandidateRequest
+  | StartOverRequest
   | FinishCorrectionRequest
   | LogAnnotationsRequest;
 

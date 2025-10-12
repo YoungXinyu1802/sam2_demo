@@ -150,6 +150,51 @@ class InferenceAPI:
                 success=False,
                 message=f"Failed to disable LoRA mode: {str(e)}"
             )
+    
+    def start_over_endpoint(self, request):
+        """HTTP endpoint to reset all states to original condition"""
+        from inference.data_types import StartOverResponse
+        try:
+            session_id = request.session_id
+            
+            # Reset LoRA mode
+            if self.lit_lora_mode:
+                logger.info("Disabling LIT-LoRA mode for start over")
+                self.predictor.LIT_LoRA_mode = False
+                self.lit_lora_mode = False
+            
+            # Reset LoRA models if they exist
+            if hasattr(self.predictor, 'trained_lora') and self.predictor.trained_lora:
+                logger.info("Resetting LoRA models for start over")
+                self.predictor.reset_lora()
+            
+            # Clear LoRA training data
+            if hasattr(self, 'lora_training_data') and session_id in self.lora_training_data:
+                logger.info("Clearing LoRA training data for start over")
+                self.lora_training_data[session_id] = {}
+            
+            # Clear session state if it exists
+            if session_id in self.session_states:
+                logger.info("Clearing session state for start over")
+                session = self.session_states[session_id]
+                # Reset the inference state to initial state
+                if 'state' in session:
+                    # Reset the existing inference state
+                    self.predictor.reset_state(session['state'])
+            
+            logger.info(f"Successfully reset all states for session {session_id}")
+            return StartOverResponse(
+                success=True,
+                message="All states reset successfully"
+            )
+        except Exception as e:
+            logger.error(f"Error in start over: {e}")
+            import traceback
+            traceback.print_exc()
+            return StartOverResponse(
+                success=False,
+                message=f"Failed to reset states: {str(e)}"
+            )
 
     def autocast_context(self):
         if self.device.type == "cuda":

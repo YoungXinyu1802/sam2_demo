@@ -845,6 +845,49 @@ export class SAM2Model extends Tracker {
     }
   }
 
+  public async startOver(): Promise<void> {
+    const sessionId = this._session.id;
+    if (!sessionId) {
+      Logger.warn('No session ID for start over');
+      return;
+    }
+
+    try {
+      const url = `${this._endpoint}/start_over`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      Logger.info('Start over completed:', result);
+
+      // Reset frontend states
+      this._litLoRAModeEnabled = false;
+      this._frameTrackingEnabled = false;
+      
+      // Disable frame tracking in context
+      this._context.enableFrameTracking(false);
+      
+      // Clear LoRA candidates
+      this._context.clearLoraCandidates();
+      
+      Logger.info('All states reset to original condition');
+    } catch (error) {
+      Logger.error('Failed to start over:', error);
+      throw error;
+    }
+  }
+
   // PRIVATE
 
   private async _sendLoRATrainingData(

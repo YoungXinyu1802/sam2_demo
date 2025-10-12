@@ -288,6 +288,20 @@ class DisableLoRAModeResponse:
 
 @dataclass_json
 @dataclass
+class StartOverRequest(BaseRequest):
+    type: str
+    session_id: str
+
+
+@dataclass_json
+@dataclass
+class StartOverResponse:
+    success: bool
+    message: str
+
+
+@dataclass_json
+@dataclass
 class InferenceSession:
     start_time: float
     last_use_time: float

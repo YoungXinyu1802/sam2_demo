@@ -36,6 +36,7 @@ import {
   GenerateLoraCandidatesRequest,
   FinishCorrectionRequest,
   InitializeTrackerRequest,
+  StartOverRequest,
   LogAnnotationsRequest,
   SessionStartFailedResponse,
   SessionStartedResponse,
@@ -514,6 +515,15 @@ export default class VideoWorkerBridge extends EventEmitter<VideoWorkerEventMap>
   generateLoraCandidates(): Promise<void> {
     return new Promise((resolve) => {
       this.sendRequest<GenerateLoraCandidatesRequest>('generateLoraCandidates');
+      // The async operation happens in the worker/tracker, so we resolve immediately
+      // The tracker will handle the actual HTTP call
+      resolve();
+    });
+  }
+
+  startOver(): Promise<void> {
+    return new Promise((resolve) => {
+      this.sendRequest<StartOverRequest>('startOver');
       // The async operation happens in the worker/tracker, so we resolve immediately
       // The tracker will handle the actual HTTP call
       resolve();
