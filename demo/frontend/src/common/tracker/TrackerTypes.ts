@@ -91,6 +91,12 @@ export type TrackFrameRequest = Request<
 >;
 export type EnableFrameTrackingRequest = Request<'enableFrameTracking', unknown>;
 export type DisableFrameTrackingRequest = Request<'disableFrameTracking', unknown>;
+export type SetTrackingFpsRequest = Request<
+  'setTrackingFps',
+  {
+    fps: number;
+  }
+>;
 export type EnableLITLoRAModeRequest = Request<'enableLITLoRAMode', unknown>;
 export type DisableLITLoRAModeRequest = Request<'disableLITLoRAMode', unknown>;
 export type GenerateLoraCandidatesRequest = Request<'generateLoraCandidates', unknown>;
@@ -121,6 +127,7 @@ export type TrackerRequest =
   | TrackFrameRequest
   | EnableFrameTrackingRequest
   | DisableFrameTrackingRequest
+  | SetTrackingFpsRequest
   | EnableLITLoRAModeRequest
   | DisableLITLoRAModeRequest
   | GenerateLoraCandidatesRequest

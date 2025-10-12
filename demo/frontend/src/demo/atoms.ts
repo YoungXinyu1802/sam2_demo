@@ -68,6 +68,8 @@ export const isStreamingAtom = atom<boolean>(false);
 
 export const frameTrackingEnabledAtom = atom<boolean>(false);
 
+export const trackingFpsAtom = atom<number>(5); // Default 5 FPS for frame tracking
+
 export const litLoRAModeEnabledAtom = atom<boolean>(false);
 
 export const loraTrainingDataAtom = atom<Array<{

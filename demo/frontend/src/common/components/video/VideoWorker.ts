@@ -162,6 +162,11 @@ self.addEventListener(
         case 'disableFrameTracking':
           tracker?.disableFrameTracking();
           break;
+        case 'setTrackingFps': {
+          const {fps} = event.data;
+          context.setTrackingFps(fps);
+          break;
+        }
         case 'enableLITLoRAMode':
           tracker?.enableLITLoRAMode();
           break;

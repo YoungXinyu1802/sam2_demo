@@ -32,6 +32,7 @@ import {
   DisableFrameTrackingRequest,
   DisableLITLoRAModeRequest,
   EnableFrameTrackingRequest,
+  SetTrackingFpsRequest,
   EnableLITLoRAModeRequest,
   GenerateLoraCandidatesRequest,
   FinishCorrectionRequest,
@@ -492,6 +493,10 @@ export default class VideoWorkerBridge extends EventEmitter<VideoWorkerEventMap>
 
   disableFrameTracking(): void {
     this.sendRequest<DisableFrameTrackingRequest>('disableFrameTracking');
+  }
+
+  setTrackingFps(fps: number): void {
+    this.sendRequest<SetTrackingFpsRequest>('setTrackingFps', {fps});
   }
 
   enableLITLoRAMode(): Promise<void> {

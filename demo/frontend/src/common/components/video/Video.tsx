@@ -124,6 +124,7 @@ export type VideoRef = {
   clearPointsInVideo(): Promise<boolean>;
   enableFrameTracking(): void;
   disableFrameTracking(): void;
+  setTrackingFps(fps: number): void;
   enableLITLoRAMode(): Promise<void>;
   disableLITLoRAMode(): Promise<void>;
   generateLoraCandidates(): Promise<void>;
@@ -262,6 +263,9 @@ export default forwardRef<VideoRef, Props>(function Video(
       },
       disableFrameTracking(): void {
         bridge.disableFrameTracking();
+      },
+      setTrackingFps(fps: number): void {
+        bridge.setTrackingFps(fps);
       },
       enableLITLoRAMode(): Promise<void> {
         return bridge.enableLITLoRAMode();

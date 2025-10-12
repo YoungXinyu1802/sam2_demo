@@ -109,7 +109,7 @@ export default class VideoWorkerContext {
   private _trackingFps: number = 5; // Sample at 5 fps for frame tracking
 
   /**
-   * Calculate if a frame index corresponds to a 5 FPS sampled frame (using frame-based logic to match navigation)
+   * Calculate if a frame index corresponds to a sampled frame based on tracking FPS
    */
   private _isSampledFrame(frameIndex: number): boolean {
     if (!this._decodedVideo) return false;
@@ -117,8 +117,19 @@ export default class VideoWorkerContext {
     const videoFps = this._decodedVideo.fps;
     const frameInterval = Math.round(videoFps / this._trackingFps);
     
-    // Check if this frame is a 5 FPS sampled frame (same logic as navigation)
+    // Check if this frame is a sampled frame based on tracking FPS
     return frameIndex % frameInterval === 0;
+  }
+
+  /**
+   * Set the tracking FPS for frame sampling
+   */
+  public setTrackingFps(fps: number): void {
+    if (fps <= 0) {
+      console.warn('Tracking FPS must be greater than 0, keeping current value');
+      return;
+    }
+    this._trackingFps = fps;
   }
 
   private _effects: Effect[];

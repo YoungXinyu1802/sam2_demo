@@ -20,6 +20,7 @@ import FinishCorrectionButton from '@/common/components/button/FinishCorrectionB
 import FrameTrackingButton from '@/common/components/button/FrameTrackingButton';
 import LITLoRAModeButton from '@/common/components/button/LITLoRAModeButton';
 import TrackAndPlayButton from '@/common/components/button/TrackAndPlayButton';
+import FPSInputBox from '@/common/components/input/FPSInputBox';
 import ToolbarBottomActionsWrapper from '@/common/components/toolbar/ToolbarBottomActionsWrapper';
 import {
   EFFECT_TOOLBAR_INDEX,
@@ -54,6 +55,7 @@ export default function ObjectsToolbarBottomActions({onTabChange}: Props) {
         <>
           {isTrackingInProgress && <TrackAndPlayButton />}
           <FrameTrackingButton />
+          <FPSInputBox className="ml-4" />
           <LITLoRAModeButton />
           <FinishCorrectionButton />
         </>
