@@ -1,5 +1,5 @@
 ARG BASE_IMAGE=pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
-ARG MODEL_SIZE=base_plus
+ARG MODEL_SIZE=large
 
 FROM ${BASE_IMAGE}
 

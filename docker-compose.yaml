@@ -24,6 +24,9 @@ services:
       # Use relative URLs (empty API_URL) so frontend can proxy requests
       - API_URL=
       - DEFAULT_VIDEO_PATH=gallery/05_default_juggle.mp4
+      # Model configuration - change this to use different model sizes
+      # Options: tiny, small, base_plus (default), large
+      - MODEL_SIZE=large
       # # ffmpeg/video encode settings
       - FFMPEG_NUM_THREADS=1
       - VIDEO_ENCODE_CODEC=libx264

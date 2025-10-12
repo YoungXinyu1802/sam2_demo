@@ -15,7 +15,7 @@ APP_ROOT = os.getenv("APP_ROOT", "/opt/sam2")
 API_URL = os.getenv("API_URL", "")
 
 
-MODEL_SIZE = os.getenv("MODEL_SIZE", "base_plus")
+MODEL_SIZE = os.getenv("MODEL_SIZE", "large")
 
 logger.info(f"using model size {MODEL_SIZE}")
 
