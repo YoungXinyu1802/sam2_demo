@@ -110,15 +110,53 @@ export default class VideoWorkerContext {
 
   /**
    * Calculate if a frame index corresponds to a sampled frame based on tracking FPS
+   * Uses interval-based sampling starting from frame 0: 0, interval, 2*interval, 3*interval, ...
+   * Example: 60 FPS video at 5 FPS tracking = frames 0, 12, 24, 36, 48, 60, 72, 84, 96, 108, 120, ...
    */
   private _isSampledFrame(frameIndex: number): boolean {
     if (!this._decodedVideo) return false;
     
-    const videoFps = this._decodedVideo.fps;
-    const frameInterval = Math.round(videoFps / this._trackingFps);
+    const videoFps = Math.round(this._decodedVideo.fps);
+    const trackingFps = Math.round(this._trackingFps);
     
-    // Check if this frame is a sampled frame based on tracking FPS
+    // Calculate interval: original FPS / tracking FPS
+    const frameInterval = Math.round(videoFps / trackingFps);
+    
+    // Debug logging for the first few frames
+    if (frameIndex <= 120 && frameIndex % frameInterval === 0) {
+      console.log(`[Frame Sampling] Video ${videoFps} FPS, Tracking ${trackingFps} FPS, Interval ${frameInterval}, Sampled frame: ${frameIndex}`);
+    }
+    
+    // Always include frame 0, then sample at regular intervals
     return frameIndex % frameInterval === 0;
+  }
+
+  /**
+   * Get the frame interval for the current video and tracking FPS
+   */
+  public getFrameSamplingInterval(): number {
+    if (!this._decodedVideo) return 1;
+    
+    const videoFps = Math.round(this._decodedVideo.fps);
+    const trackingFps = Math.round(this._trackingFps);
+    
+    return Math.round(videoFps / trackingFps);
+  }
+
+  /**
+   * Get a list of sampled frame indices for debugging
+   */
+  public getSampledFrames(maxFrames: number = 100): number[] {
+    if (!this._decodedVideo) return [];
+    
+    const interval = this.getFrameSamplingInterval();
+    const sampledFrames: number[] = [];
+    
+    for (let i = 0; i < maxFrames; i += interval) {
+      sampledFrames.push(i);
+    }
+    
+    return sampledFrames;
   }
 
   /**

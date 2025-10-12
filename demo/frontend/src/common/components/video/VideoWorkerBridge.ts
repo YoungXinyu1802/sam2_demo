@@ -499,6 +499,26 @@ export default class VideoWorkerBridge extends EventEmitter<VideoWorkerEventMap>
     this.sendRequest<SetTrackingFpsRequest>('setTrackingFps', {fps});
   }
 
+  getFrameSamplingInterval(): number {
+    // Calculate interval based on video FPS and tracking FPS
+    // Default tracking FPS is 5, video FPS comes from metadata
+    const videoFps = this.metadata?.fps ?? 30; // Default to 30 FPS if not available
+    const trackingFps = 5; // Default tracking FPS (this should ideally be stored and configurable)
+    
+    return Math.round(videoFps / trackingFps);
+  }
+
+  getSampledFrames(maxFrames: number = 100): number[] {
+    const interval = this.getFrameSamplingInterval();
+    const sampledFrames: number[] = [];
+    
+    for (let i = 0; i < maxFrames; i += interval) {
+      sampledFrames.push(i);
+    }
+    
+    return sampledFrames;
+  }
+
   enableLITLoRAMode(): Promise<void> {
     return new Promise((resolve) => {
       this.sendRequest<EnableLITLoRAModeRequest>('enableLITLoRAMode');

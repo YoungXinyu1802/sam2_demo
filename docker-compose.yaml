@@ -28,6 +28,8 @@ services:
       - FFMPEG_NUM_THREADS=1
       - VIDEO_ENCODE_CODEC=libx264
       - VIDEO_ENCODE_CRF=23
+      # VIDEO_ENCODE_FPS is now automatically detected from uploaded videos
+      # Fallback FPS can be set via VIDEO_ENCODE_FPS if video FPS detection fails
       - VIDEO_ENCODE_FPS=24
       - VIDEO_ENCODE_MAX_WIDTH=1280
       - VIDEO_ENCODE_MAX_HEIGHT=720

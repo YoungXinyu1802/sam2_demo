@@ -41,10 +41,25 @@ def transcode(
 ):
     codec = os.environ.get("VIDEO_ENCODE_CODEC", "libx264")
     crf = int(os.environ.get("VIDEO_ENCODE_CRF", "23"))
-    fps = int(os.environ.get("VIDEO_ENCODE_FPS", "24"))
     max_w = int(os.environ.get("VIDEO_ENCODE_MAX_WIDTH", "1280"))
     max_h = int(os.environ.get("VIDEO_ENCODE_MAX_HEIGHT", "720"))
     verbose = ast.literal_eval(os.environ.get("VIDEO_ENCODE_VERBOSE", "False"))
+
+    # Get video metadata if not provided
+    if in_metadata is None:
+        in_metadata = get_video_metadata(in_path)
+    
+    # Use the video's actual FPS instead of hardcoded environment variable
+    # Fall back to environment variable if video FPS is not available
+    video_fps = in_metadata.fps
+    print(f"Debug: Detected video FPS: {video_fps}")
+    
+    if video_fps is None or video_fps <= 0 or video_fps > 120:  # Reasonable FPS range
+        fps = int(os.environ.get("VIDEO_ENCODE_FPS", "24"))
+        print(f"Warning: Video FPS not detected or invalid ({video_fps}), using fallback FPS: {fps}")
+    else:
+        fps = int(round(video_fps))
+        print(f"Using video FPS: {fps} (detected from video metadata)")
 
     normalize_video(
         in_path=in_path,
@@ -83,14 +98,28 @@ def get_video_metadata(path: str) -> VideoMetadata:
             num_video_frames = video_stream.frames
             video_start_time = float(video_stream.start_time * video_stream.time_base)
             width, height = video_stream.width, video_stream.height
-            fps = float(video_stream.guessed_rate)
-            fps_avg = video_stream.average_rate
+            
+            # Try multiple methods to get FPS
+            fps = None
+            if video_stream.guessed_rate is not None:
+                fps = float(video_stream.guessed_rate)
+            elif video_stream.average_rate is not None:
+                fps = float(video_stream.average_rate)
+            
+            # Additional FPS detection methods
+            if fps is None or fps <= 0:
+                # Try to calculate FPS from frame count and duration
+                if video_stream.frames and video_stream.duration:
+                    calculated_fps = video_stream.frames / (video_stream.duration * video_stream.time_base)
+                    if calculated_fps > 0:
+                        fps = calculated_fps
+            
+            print(f"Debug: FPS detection - guessed_rate: {video_stream.guessed_rate}, average_rate: {video_stream.average_rate}, calculated: {fps}")
+            
             if video_stream.duration is not None:
                 video_duration_sec = float(
                     video_stream.duration * video_stream.time_base
                 )
-            if fps is None:
-                fps = float(fps_avg)
 
             if not math.isnan(rotation_deg) and int(rotation_deg) in (
                 90,

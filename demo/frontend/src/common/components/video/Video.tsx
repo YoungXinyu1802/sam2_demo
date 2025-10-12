@@ -125,6 +125,8 @@ export type VideoRef = {
   enableFrameTracking(): void;
   disableFrameTracking(): void;
   setTrackingFps(fps: number): void;
+  getFrameSamplingInterval(): number;
+  getSampledFrames(maxFrames?: number): number[];
   enableLITLoRAMode(): Promise<void>;
   disableLITLoRAMode(): Promise<void>;
   generateLoraCandidates(): Promise<void>;
@@ -266,6 +268,12 @@ export default forwardRef<VideoRef, Props>(function Video(
       },
       setTrackingFps(fps: number): void {
         bridge.setTrackingFps(fps);
+      },
+      getFrameSamplingInterval(): number {
+        return bridge.getFrameSamplingInterval();
+      },
+      getSampledFrames(maxFrames?: number): number[] {
+        return bridge.getSampledFrames(maxFrames);
       },
       enableLITLoRAMode(): Promise<void> {
         return bridge.enableLITLoRAMode();
