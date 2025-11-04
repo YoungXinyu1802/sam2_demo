@@ -27,10 +27,20 @@ export default function PlaybackButton() {
   const isPlaying = useAtomValue(isPlayingAtom);
   const video = useVideo();
 
+  // Disable play button when:
+  // 1. In object toolbar tab
+  // 2. Streaming state is 'requesting' or 'aborting' (blocking states)
+  // 3. Allow play when:
+  //    - Streaming state is 'none', 'full', or 'partial' (partial = frame-by-frame streaming mode)
+  //    - OR frame tracking is enabled
   const isDisabled =
     tabIndex === OBJECT_TOOLBAR_INDEX &&
-    streamingState !== 'none' &&
-    streamingState !== 'full';
+    (streamingState === 'requesting' || streamingState === 'aborting');
+  
+  // Debug logging
+  if (tabIndex === OBJECT_TOOLBAR_INDEX) {
+    console.log(`[PlaybackButton] tabIndex=${tabIndex}, streamingState=${streamingState}, isDisabled=${isDisabled}`);
+  }
 
   const handlePlay = useCallback(() => {
     video?.play();

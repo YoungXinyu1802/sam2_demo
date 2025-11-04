@@ -85,13 +85,14 @@ export class SAM2Model extends Tracker {
   private _endpoint: string;
   private _environment: IEnvironment;
 
-  private abortController: AbortController | null = null;
   private _session: Session = {
     id: null,
     tracklets: {},
   };
   private _streamingState: StreamingState = 'none';
   private _frameTrackingEnabled: boolean = false;
+  private _streamingModeEnabled: boolean = false; // Frame-by-frame streaming mode
+  private _streamingStartFrame: number = 0; // Start frame for streaming
   private _litLoRAModeEnabled: boolean = false;
   private _trackingFps: number = 5; // Default tracking FPS
 
@@ -334,8 +335,8 @@ export class SAM2Model extends Tracker {
     );
 
     // Mark session needing propagation when point is set
-    // If frame tracking is enabled, keep state as 'full' to allow continuing playback
-    if (!this._frameTrackingEnabled) {
+    // If frame tracking or streaming mode is enabled, keep state to allow continuing playback
+    if (!this._frameTrackingEnabled && !this._streamingModeEnabled) {
       this._updateStreamingState('required');
     }
 
@@ -642,51 +643,158 @@ export class SAM2Model extends Tracker {
       return Promise.reject('No active session');
     }
     try {
-      this._sendResponse<StreamingStartedResponse>('streamingStarted');
-
       // 1. Clear previous masks
       this._context.clearMasks();
       this._clearTrackletMasks();
 
-      // 2. Create abort controller and async generator
-      const controller = new AbortController();
-      this.abortController = controller;
+      // 2. Enable streaming mode for frame-by-frame tracking during playback
+      this._streamingModeEnabled = true;
+      this._streamingStartFrame = frameIndex;
+      
+      // Set streaming state to 'partial' BEFORE sending streamingStarted
+      // This ensures the play button is enabled when streaming mode starts
+      this._updateStreamingState('partial');
+      
+      // Send streaming started event after setting state
+      this._sendResponse<StreamingStartedResponse>('streamingStarted');
+      
+      console.log(`[SAM2Model] streamMasks: Set streaming state to 'partial'`);
 
-      this._updateStreamingState('requesting');
-      const generator = this._streamMasksForSession(
-        controller,
-        sessionId,
-        frameIndex,
-      );
-
-      // 3. parse stream response and update masks in session objects
-      let isAborted = false;
-      for await (const result of generator) {
-        if ('aborted' in result) {
-          this._updateStreamingState('aborting');
-          isAborted = true;
+      // 3. Enable frame tracking to trigger callbacks during playback
+      // The existing callback in VideoWorker will call trackFrame, which we'll enhance
+      // to also handle streaming mode
+      // Note: We need to enable frame tracking so the callback gets called during playback
+      // The frame tracking callback is already set up in VideoWorker.ts
+      // We enable both the context's frame tracking and our own flag
+      this._context.enableFrameTracking(true);
+      // Note: We don't set _frameTrackingEnabled here because we're using streaming mode
+      // The trackFrame method will check for _streamingModeEnabled first
+      
+      // Important: After enabling frame tracking, we need to ensure the video can play
+      // The enableFrameTracking method pauses the video, but for streaming mode we want
+      // it to continue playing. However, we can't play it here - the user needs to click play.
+      // The frame tracking will work once the video starts playing.
+      
+      // 4. Track the initial frame if video is paused at or after the start frame
+      const currentFrameIndex = this._context.frameIndex;
+      console.log(`[SAM2Model] Streaming mode: currentFrameIndex=${currentFrameIndex}, startFrame=${frameIndex}`);
+      
+      if (currentFrameIndex >= frameIndex) {
+        const frameInterval = this._context.getFrameSamplingInterval();
+        console.log(`[SAM2Model] Streaming mode: frameInterval=${frameInterval}`);
+        // Check if current frame is a sampled frame
+        if (currentFrameIndex % frameInterval === 0) {
+          const reindexedFrame = Math.floor(currentFrameIndex / frameInterval);
+          console.log(`[SAM2Model] Streaming mode: tracking initial frame ${currentFrameIndex} (reindexed: ${reindexedFrame})`);
+          await this._trackFrameForStreaming(currentFrameIndex, reindexedFrame);
         } else {
-          await this._updateTrackletMasks(result, false);
-          this._updateStreamingState('partial');
+          console.log(`[SAM2Model] Streaming mode: skipping initial frame ${currentFrameIndex} (not sampled)`);
         }
       }
 
-      if (!isAborted) {
-        // Mark session needing propagation when point is set
-        this._updateStreamingState('full');
-      }
+      console.log(`[SAM2Model] Streaming mode enabled - will track frames frame-by-frame during playback starting from frame ${frameIndex}`);
     } catch (error) {
       Logger.error(error);
+      this._streamingModeEnabled = false;
+      this._context.setOnFrameCallback(null);
+      this._context.enableFrameTracking(false);
       throw error;
     }
-
-    this._sendResponse<StreamingCompletedResponse>('streamingCompleted');
   }
 
   public abortStreamMasks() {
-    this.abortController?.abort();
+    // Disable streaming mode
+    this._streamingModeEnabled = false;
+    
+    // Disable frame tracking if it was only enabled for streaming
+    if (!this._frameTrackingEnabled) {
+      this._context.enableFrameTracking(false);
+    }
+    
+    this._updateStreamingState('none');
     this._sendResponse<StreamingCompletedResponse>('streamingCompleted');
   }
+
+  /**
+   * Helper method to track a frame for streaming mode
+   */
+  private async _trackFrameForStreaming(
+    actualFrameIndex: number,
+    reindexedFrameIndex: number,
+  ): Promise<void> {
+    const sessionId = this._session.id;
+    if (sessionId === null || !this._streamingModeEnabled) {
+      return;
+    }
+
+    // Check if we have any tracklets initialized
+    const hasInitializedTracklets = Object.values(this._session.tracklets).some(
+      tracklet => tracklet.isInitialized
+    );
+    if (!hasInitializedTracklets) {
+      return; // Nothing to track yet
+    }
+
+    console.log(`[SAM2Model] Streaming: tracking frame ${actualFrameIndex} (reindexed: ${reindexedFrameIndex})`);
+
+    try {
+      const url = `${this._endpoint}/propagate_to_frame`;
+      const requestBody = {
+        session_id: sessionId,
+        frame_index: reindexedFrameIndex,
+        tracking_fps: this._trackingFps,
+      };
+
+      const headers: {[name: string]: string} = {
+        'Content-Type': 'application/json',
+      };
+
+      console.log(`[SAM2Model] Streaming: sending request to ${url}`, requestBody);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+        headers,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        Logger.error(`Failed to track frame ${actualFrameIndex} for streaming: ${errorText}`);
+        console.error(`[SAM2Model] Streaming: request failed for frame ${actualFrameIndex}: ${errorText}`);
+        return;
+      }
+
+      const jsonResponse = await response.json();
+      console.log(`[SAM2Model] Streaming: received response for frame ${actualFrameIndex}`, jsonResponse);
+      const maskResults = jsonResponse.results;
+      const rleMaskList = maskResults.map(
+        (mask: {object_id: number; mask: RLEObject}) => {
+          return {
+            objectId: mask.object_id,
+            rleMask: mask.mask,
+          };
+        },
+      );
+
+      // Store the mask at the current video frame
+      const result = {
+        frameIndex: actualFrameIndex,
+        rleMaskList,
+      };
+
+      console.log(`[SAM2Model] Streaming: updating tracklets for frame ${actualFrameIndex} with ${rleMaskList.length} masks`);
+      // Update tracklets without disrupting playback
+      await this._updateTrackletMasks(result, false, false);
+      console.log(`[SAM2Model] Streaming: successfully updated tracklets for frame ${actualFrameIndex}`);
+      
+      // Check if we've reached the end of the video
+      // If so, mark streaming as complete
+      // Note: This would require checking video length, which we can do via context
+    } catch (error) {
+      Logger.error(`Error tracking frame ${actualFrameIndex} for streaming:`, error);
+    }
+  }
+
 
   public async trackFrame(frameIndex: number): Promise<void> {
     const sessionId = this._session.id;
@@ -704,7 +812,26 @@ export class SAM2Model extends Tracker {
       return; // Nothing to track yet
     }
     
-    // Only track if frame tracking is enabled
+    // If streaming mode is enabled, use streaming tracking
+    if (this._streamingModeEnabled) {
+      console.log(`[SAM2Model] trackFrame called in streaming mode: reindexedFrame=${frameIndex}`);
+      // Calculate actual video frame index from reindexed frame
+      const frameInterval = this._context.getFrameSamplingInterval();
+      const actualFrameIndex = frameIndex * frameInterval;
+      
+      console.log(`[SAM2Model] Streaming mode: actualFrameIndex=${actualFrameIndex}, startFrame=${this._streamingStartFrame}, frameInterval=${frameInterval}`);
+      
+      // Only track frames from the start frame onwards
+      if (actualFrameIndex >= this._streamingStartFrame) {
+        console.log(`[SAM2Model] Streaming mode: calling _trackFrameForStreaming for frame ${actualFrameIndex}`);
+        await this._trackFrameForStreaming(actualFrameIndex, frameIndex);
+      } else {
+        console.log(`[SAM2Model] Streaming mode: skipping frame ${actualFrameIndex} (before start frame ${this._streamingStartFrame})`);
+      }
+      return;
+    }
+    
+    // Only track if frame tracking is enabled (not streaming mode)
     if (!this._context || !this._frameTrackingEnabled) {
       return;
     }
@@ -1298,6 +1425,9 @@ export class SAM2Model extends Tracker {
     return {compressedData, ctx};
   }
 
+  // Legacy method - no longer used since we switched to frame-by-frame tracking
+  // Kept for reference but not called
+  // @ts-ignore - intentionally unused legacy method
   private async *_streamMasksForSession(
     abortController: AbortController,
     sessionId: string,
