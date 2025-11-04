@@ -501,6 +501,14 @@ export class SAM2Model extends Tracker {
             })),
           });
 
+          // Mark tracklets as initialized (similar to updatePoints)
+          for (const {objectId} of rleMaskList) {
+            const tracklet = this._session.tracklets[objectId];
+            if (tracklet != null) {
+              tracklet.isInitialized = true;
+            }
+          }
+          
           this._updateTrackletMasks(trackletUpdate, true);
           console.log('[SAM2Model.addMask] Tracklet masks updated successfully');
           resolve();

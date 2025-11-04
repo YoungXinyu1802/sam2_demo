@@ -20,7 +20,7 @@ import {VideoData} from '@/demo/atoms';
 import {DEMO_SHORT_NAME} from '@/demo/DemoConfig';
 import {loadMaskImageToRLE} from '@/common/utils/MaskUtils';
 import {useEffect, useRef, useState} from 'react';
-import {useAtom, useAtomValue} from 'jotai';
+import {useAtom, useAtomValue, useSetAtom} from 'jotai';
 import {
   activeTrackletObjectIdAtom,
   sessionAtom,
@@ -38,6 +38,7 @@ export default function FirstClickView({video}: Props) {
   const videoWorker = useVideo();
   const [session] = useAtom(sessionAtom);
   const [activeTrackletId] = useAtom(activeTrackletObjectIdAtom);
+  const setActiveTrackletId = useSetAtom(activeTrackletObjectIdAtom);
   const tracklets = useAtomValue(trackletObjectsAtom);
   const [isLoadingMask, setIsLoadingMask] = useState(false);
 
@@ -99,7 +100,10 @@ export default function FirstClickView({video}: Props) {
       
       await videoWorker.addMask(0, trackletId, rleMask);
       
-      console.log('[FirstClickView] Mask successfully applied');
+      // Set the active tracklet so it appears as selected
+      setActiveTrackletId(trackletId);
+      
+      console.log('[FirstClickView] Mask successfully applied - UI should transition to tracking view');
       enqueueMessage('pointClick');
     } catch (error) {
       console.error('[FirstClickView] Failed to load mask:', error);

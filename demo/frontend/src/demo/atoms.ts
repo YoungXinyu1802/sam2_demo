@@ -135,7 +135,10 @@ export const areTrackletObjectsInitializedAtom = atom<boolean>(get =>
 
 export const isFirstClickMadeAtom = atom(get => {
   const tracklets = get(trackletObjectsAtom);
-  return tracklets.some(tracklet => tracklet.points.length > 0);
+  return tracklets.some(tracklet => 
+    tracklet.points.length > 0 || 
+    tracklet.masks.some(mask => !mask.isEmpty)
+  );
 });
 
 export const pointsAtom = atom<SegmentationPoint[]>(get => {
