@@ -177,6 +177,13 @@ export default class VideoWorkerContext {
     return this._trackingFps;
   }
 
+  /**
+   * Get the original video FPS
+   */
+  public getVideoFps(): number | null {
+    return this._decodedVideo?.fps ?? null;
+  }
+
   private _effects: Effect[];
   private _tracklets: Tracklet[] = [];
   private _loraCandidateMasks: Array<{mask: RLEObject; color: string}> = [];
@@ -645,15 +652,23 @@ export default class VideoWorkerContext {
     tracklets: Tracklet[],
     shouldGoToFrame: boolean = true,
   ): void {
+    console.log(`[VideoWorkerContext.updateTracklets] frameIndex=${frameIndex}, shouldGoToFrame=${shouldGoToFrame}, currentFrameIndex=${this._frameIndex}, numTracklets=${tracklets.length}`);
+    tracklets.forEach((tracklet, idx) => {
+      const mask = tracklet.masks[frameIndex];
+      console.log(`[VideoWorkerContext.updateTracklets] Tracklet ${idx} (id=${tracklet.id}): has mask at frame ${frameIndex} = ${mask != null}, isEmpty=${mask?.isEmpty ?? 'N/A'}`);
+    });
+    
     this._tracklets = tracklets;
     if (shouldGoToFrame) {
       // Always call goToFrame, which will trigger a redraw
       // Even if we're already at this frame, this ensures masks are updated and visible
+      console.log(`[VideoWorkerContext.updateTracklets] Calling goToFrame(${frameIndex})`);
       this.goToFrame(frameIndex);
     } else {
       // Even if not going to frame, force a redraw if we're already at this frame
       // This ensures masks are visible when added without changing frames
       if (this._frameIndex === frameIndex) {
+        console.log(`[VideoWorkerContext.updateTracklets] Already at frame ${frameIndex}, forcing redraw`);
         this._playbackRAFHandle = requestAnimationFrame(this._drawFrame.bind(this));
       }
     }
@@ -863,19 +878,25 @@ export default class VideoWorkerContext {
       const masks: Mask[] = [];
       const colors: string[] = [];
       const tracklets: Tracklet[] = [];
-      this._tracklets.forEach((tracklet) => {
+      console.log(`[VideoWorkerContext._drawFrameImpl] Drawing frame ${frameIndex}, numTracklets=${this._tracklets.length}`);
+      this._tracklets.forEach((tracklet, idx) => {
         const mask = tracklet.masks[frameIndex];
+        console.log(`[VideoWorkerContext._drawFrameImpl] Tracklet ${idx} (id=${tracklet.id}): mask at frame ${frameIndex} = ${mask != null}, isEmpty=${mask?.isEmpty ?? 'N/A'}`);
         if (mask != null && !mask.isEmpty) {
           masks.push(mask);
           tracklets.push(tracklet);
           colors.push(tracklet.color);
+        } else if (mask != null && mask.isEmpty) {
+          console.log(`[VideoWorkerContext._drawFrameImpl] Skipping empty mask for tracklet ${idx} (id=${tracklet.id})`);
         }
       });
+      console.log(`[VideoWorkerContext._drawFrameImpl] Collected ${masks.length} masks for rendering`);
       const effectActionPoint = this._currentSegmetationPoint;
 
       this._stats.maskBmp?.begin();
 
-      const effectMaskPromises = masks.map(async ({data, bounds}) => {
+      const effectMaskPromises = masks.map(async ({data, bounds, isEmpty}) => {
+        console.log(`[VideoWorkerContext._drawFrameImpl] Processing mask: bounds=${JSON.stringify(bounds)}, isEmpty=${isEmpty}, data.size=${(data as RLEObject).size}, data.counts.length=${(data as RLEObject).counts.length}`);
         return {
           bounds,
           bitmap: data as RLEObject,
@@ -894,6 +915,8 @@ export default class VideoWorkerContext {
       const effectMasks = await Promise.all([...effectMaskPromises, ...loraCandidatePromises]);
 
       this._stats.maskBmp?.end();
+
+      console.log(`[VideoWorkerContext._drawFrameImpl] Effect masks prepared: ${effectMasks.length} masks, ${colors.length} colors`);
 
       form.ctx.fillStyle = 'rgba(0, 0, 0, 0)';
       form.ctx.fillRect(0, 0, this.width, this.height);

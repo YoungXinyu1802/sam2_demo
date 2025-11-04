@@ -643,6 +643,17 @@ export class SAM2Model extends Tracker {
       return Promise.reject('No active session');
     }
     try {
+      // Get the original video FPS and set tracking FPS to match it
+      const originalVideoFps = this._context.getVideoFps();
+      if (originalVideoFps !== null && originalVideoFps > 0) {
+        console.log(`[SAM2Model] Original video FPS: ${originalVideoFps}`);
+        this.setTrackingFps(originalVideoFps);
+        this._context.setTrackingFps(originalVideoFps);
+        console.log(`[SAM2Model] Set frame-by-frame tracking FPS to match original video FPS: ${originalVideoFps}`);
+      } else {
+        console.warn(`[SAM2Model] Could not get original video FPS, using default tracking FPS: ${this._trackingFps}`);
+      }
+
       // 1. Clear previous masks
       this._context.clearMasks();
       this._clearTrackletMasks();
