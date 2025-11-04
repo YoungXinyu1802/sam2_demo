@@ -50,8 +50,15 @@ POSTERS_PREFIX = "posters"
 # Path where all posters are stored
 POSTERS_PATH = DATA_PATH / POSTERS_PREFIX
 
+# Prefix for mask images
+MASKS_PREFIX = "masks"
+
+# Path where all mask images are stored
+MASKS_PATH = DATA_PATH / MASKS_PREFIX
+
 # Make sure any of those paths exist
 os.makedirs(DATA_PATH, exist_ok=True)
 os.makedirs(GALLERY_PATH, exist_ok=True)
 os.makedirs(UPLOADS_PATH, exist_ok=True)
 os.makedirs(POSTERS_PATH, exist_ok=True)
+os.makedirs(MASKS_PATH, exist_ok=True)

@@ -67,6 +67,11 @@ export interface ITracker {
     objectId: number,
     points: SegmentationPoint[],
   ): Promise<void>;
+  addMask(
+    frameIndex: number,
+    objectId: number,
+    rleMask: RLEObject,
+  ): Promise<void>;
   clearPointsInFrame(frameIndex: number, objectId: number): Promise<void>;
   clearPointsInVideo(): Promise<void>;
   streamMasks(frameIndex: number): Promise<void>;
@@ -97,6 +102,11 @@ export abstract class Tracker implements ITracker {
     frameIndex: number,
     objectId: number,
     points: SegmentationPoint[],
+  ): Promise<void>;
+  abstract addMask(
+    frameIndex: number,
+    objectId: number,
+    rleMask: RLEObject,
   ): Promise<void>;
   abstract clearPointsInFrame(
     frameIndex: number,

@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import {RLEObject} from '@/jscocotools/mask';
 import {BaseTracklet, SegmentationPoint} from '@/common/tracker/Tracker';
 import {TrackerOptions, Trackers} from '@/common/tracker/Trackers';
 import {PauseFilled, PlayFilledAlt} from '@carbon/icons-react';
@@ -121,6 +122,7 @@ export type VideoRef = {
   createTracklet(): Promise<BaseTracklet>;
   deleteTracklet(trackletId: number): Promise<void>;
   updatePoints(trackletId: number, points: SegmentationPoint[]): void;
+  addMask(frameIndex: number, objectId: number, rleMask: RLEObject): Promise<void>;
   clearPointsInVideo(): Promise<boolean>;
   enableFrameTracking(): void;
   disableFrameTracking(): void;
@@ -178,7 +180,7 @@ export default forwardRef<VideoRef, Props>(function Video(
         return bridge.width;
       },
       get height() {
-        return bridge.width;
+        return bridge.height;
       },
       get frame() {
         return bridge.frame;
@@ -256,6 +258,9 @@ export default forwardRef<VideoRef, Props>(function Video(
       },
       updatePoints(trackletId: number, points: SegmentationPoint[]): void {
         bridge.updatePoints(trackletId, points);
+      },
+      addMask(frameIndex: number, objectId: number, rleMask: RLEObject): Promise<void> {
+        return bridge.addMask(frameIndex, objectId, rleMask);
       },
       clearPointsInVideo(): Promise<boolean> {
         return bridge.clearPointsInVideo();

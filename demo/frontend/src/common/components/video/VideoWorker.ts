@@ -134,6 +134,11 @@ self.addEventListener(
           await tracker?.updatePoints(frameIndex, objectId, points);
           break;
         }
+        case 'addMask': {
+          const {frameIndex, objectId, rleMask} = event.data;
+          await tracker?.addMask(frameIndex, objectId, rleMask);
+          break;
+        }
         case 'clearPointsInFrame': {
           const {frameIndex, objectId} = event.data;
           await tracker?.clearPointsInFrame(frameIndex, objectId);

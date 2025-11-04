@@ -25,6 +25,7 @@ import ToolbarObject from '@/common/components/annotations/ToolbarObject';
 import {
   activeTrackletObjectAtom,
   activeTrackletObjectIdAtom,
+  inputVideoAtom,
   isAddObjectEnabledAtom,
   isFirstClickMadeAtom,
   isTrackletObjectLimitReachedAtom,
@@ -43,9 +44,10 @@ export default function ObjectsToolbar({onTabChange}: Props) {
   const isFirstClickMade = useAtomValue(isFirstClickMadeAtom);
   const isObjectLimitReached = useAtomValue(isTrackletObjectLimitReachedAtom);
   const isAddObjectEnabled = useAtomValue(isAddObjectEnabledAtom);
+  const inputVideo = useAtomValue(inputVideoAtom);
 
   if (!isFirstClickMade) {
-    return <FirstClickView />;
+    return <FirstClickView video={inputVideo ?? undefined} />;
   }
 
   return (

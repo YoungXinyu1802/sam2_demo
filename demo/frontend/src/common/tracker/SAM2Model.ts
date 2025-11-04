@@ -393,6 +393,126 @@ export class SAM2Model extends Tracker {
     });
   }
 
+  public addMask(
+    frameIndex: number,
+    objectId: number,
+    rleMask: RLEObject,
+  ): Promise<void> {
+    const sessionId = this._session.id;
+    if (sessionId === null) {
+      return Promise.reject('No active session');
+    }
+
+    const tracklet = this._session.tracklets[objectId];
+    invariant(
+      tracklet != null,
+      'tracklet for object id %s not initialized',
+      objectId,
+    );
+
+    // Mark session needing propagation when mask is set
+    if (!this._frameTrackingEnabled) {
+      this._updateStreamingState('required');
+    }
+
+    return new Promise((resolve, reject) => {
+      const url = `${this._endpoint}/add_mask`;
+      const requestBody = {
+        session_id: sessionId,
+        frame_index: frameIndex,
+        object_id: objectId,
+        mask: {
+          size: rleMask.size,
+          counts: rleMask.counts,
+        },
+      };
+
+      const headers: {[name: string]: string} = {
+        'Content-Type': 'application/json',
+      };
+
+      console.log('[SAM2Model.addMask] Sending request:', {
+        url,
+        frameIndex,
+        objectId,
+        sessionId,
+        rleSize: rleMask.size,
+        rleCountsLength: rleMask.counts.length,
+      });
+
+      fetch(url, {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+        headers,
+      })
+        .then(async response => {
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[SAM2Model.addMask] Request failed:', {
+              status: response.status,
+              statusText: response.statusText,
+              errorText,
+            });
+            return Promise.reject(
+              new Error(`Failed to add mask: ${errorText}`),
+            );
+          }
+          return response.json();
+        })
+        .then((response: any) => {
+          console.log('[SAM2Model.addMask] Response received:', {
+            frame_index: response.frame_index,
+            num_results: response.results?.length,
+            results: response.results?.map((r: any) => ({
+              object_id: r.object_id,
+              mask_size: r.mask?.size,
+              counts_length: r.mask?.counts?.length,
+            })),
+          });
+
+          const {frame_index, results} = response;
+          const rleMaskList = results.map((r: any) => ({
+            objectId: r.object_id,
+            rleMask: {
+              size: r.mask.size,
+              counts: r.mask.counts,
+            },
+          }));
+
+          // Update tracklet masks similar to updatePoints
+          const trackletUpdate = {
+            frameIndex: frame_index,
+            rleMaskList: rleMaskList.map((r: any) => ({
+              objectId: r.objectId,
+              rleMask: {
+                size: r.rleMask.size,
+                counts: r.rleMask.counts,
+              },
+            })),
+          };
+
+          console.log('[SAM2Model.addMask] Updating tracklet masks:', {
+            frameIndex: trackletUpdate.frameIndex,
+            numMasks: trackletUpdate.rleMaskList.length,
+            masks: trackletUpdate.rleMaskList.map((r: any) => ({
+              objectId: r.objectId,
+              rleSize: r.rleMask.size,
+              rleCountsLength: r.rleMask.counts.length,
+            })),
+          });
+
+          this._updateTrackletMasks(trackletUpdate, true);
+          console.log('[SAM2Model.addMask] Tracklet masks updated successfully');
+          resolve();
+        })
+        .catch(error => {
+          console.error('[SAM2Model.addMask] Error:', error);
+          Logger.error(error);
+          reject(error);
+        });
+    });
+  }
+
   public clearPointsInFrame(
     frameIndex: number,
     objectId: number,

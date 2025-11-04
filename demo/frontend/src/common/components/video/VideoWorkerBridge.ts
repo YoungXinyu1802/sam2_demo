@@ -22,6 +22,7 @@ import {
 } from '@/common/tracker/Tracker';
 import {
   AbortStreamMasksRequest,
+  AddMaskRequest,
   AddPointsResponse,
   ClearPointsInFrameRequest,
   ClearPointsInVideoRequest,
@@ -49,8 +50,10 @@ import {
   TrackerResponseMessageEvent,
   TrackletCreatedResponse,
   TrackletDeletedResponse,
+  TrackletsUpdatedResponse,
   UpdatePointsRequest,
 } from '@/common/tracker/TrackerTypes';
+import {RLEObject} from '@/jscocotools/mask';
 import {TrackerOptions, Trackers} from '@/common/tracker/Trackers';
 import {MP4ArrayBuffer} from 'mp4box';
 import {deserializeError, type ErrorObject} from 'serialize-error';
@@ -430,6 +433,25 @@ export default class VideoWorkerBridge extends EventEmitter<VideoWorkerEventMap>
         frameIndex: this.frame,
         objectId,
         points,
+      });
+    });
+  }
+
+  addMask(frameIndex: number, objectId: number, rleMask: RLEObject): Promise<void> {
+    return new Promise(resolve => {
+      const handleResponse = (event: MessageEvent<TrackletsUpdatedResponse>) => {
+        if (event.data.action === 'trackletsUpdated') {
+          this.worker.removeEventListener('message', handleResponse);
+          resolve();
+        }
+      };
+
+      this.worker.addEventListener('message', handleResponse);
+
+      this.sendRequest<AddMaskRequest>('addMask', {
+        frameIndex,
+        objectId,
+        rleMask,
       });
     });
   }

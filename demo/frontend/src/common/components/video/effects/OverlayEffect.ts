@@ -76,6 +76,7 @@ export default class OverlayEffect extends BaseGLEffect {
       context.timeParameter ?? 1.5, // Pass a constant value when no time parameter
     );
     gl.uniform1f(gl.getUniformLocation(program, 'uOpacity'), opacity);
+    console.log(`[OverlayEffect] Rendering ${context.masks.length} masks with opacity ${opacity}, variant ${this.variant}`);
     gl.uniform1i(this._numMasksUniformLocation, context.masks.length);
     gl.uniform1i(
       gl.getUniformLocation(program, 'uBorder'),
@@ -123,6 +124,9 @@ export default class OverlayEffect extends BaseGLEffect {
     context.masks.forEach((mask, index) => {
       const decodedMask = decode([mask.bitmap as RLEObject]);
       const maskData = decodedMask.data as Uint8Array;
+      const foregroundPixels = maskData.filter(p => p > 0).length;
+      const totalPixels = maskData.length;
+      console.log(`[OverlayEffect] Mask ${index}: bounds=${JSON.stringify(mask.bounds)}, size=${(mask.bitmap as RLEObject).size}, foregroundPixels=${foregroundPixels}/${totalPixels} (${(foregroundPixels/totalPixels*100).toFixed(2)}%), color=${context.maskColors[index]}`);
       gl.activeTexture(gl.TEXTURE0 + index + this._masksTextureUnitStart);
       gl.bindTexture(gl.TEXTURE_2D, this._maskTextures[index]);
 

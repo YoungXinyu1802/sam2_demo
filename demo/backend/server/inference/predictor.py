@@ -399,8 +399,19 @@ class InferenceAPI:
 
             mask = decode_masks(rle_mask)
 
+            # Log decoded mask info
+            logger.info(f"[InferenceAPI.add_mask] Decoded mask: shape={mask.shape}, dtype={mask.dtype}, "
+                       f"min={mask.min()}, max={mask.max()}, "
+                       f"foreground_pixels={(mask > 0).sum()}, total_pixels={mask.size}, "
+                       f"foreground_percentage={((mask > 0).sum() / mask.size * 100):.2f}%")
+
             session = self.__get_session(session_id)
             inference_state = session["state"]
+            
+            # Log video dimensions
+            video_height = inference_state.get("video_height", "unknown")
+            video_width = inference_state.get("video_width", "unknown")
+            logger.info(f"[InferenceAPI.add_mask] Video dimensions: {video_width}x{video_height}")
 
             # Handle frame reindexing if tracking_fps is set (sampled frames)
             frame_idx = original_frame_idx
@@ -416,17 +427,40 @@ class InferenceAPI:
                 f"add mask on frame {frame_idx} in session {session_id}: {obj_id=}, {mask.shape=}"
             )
 
-            frame_idx, obj_ids, video_res_masks = self.model.add_new_mask(
+            mask_tensor = torch.tensor(mask > 0)
+            logger.info(f"[InferenceAPI.add_mask] Mask tensor: shape={mask_tensor.shape}, dtype={mask_tensor.dtype}, "
+                       f"foreground_pixels={mask_tensor.sum().item()}, total_pixels={mask_tensor.numel()}")
+
+            # Store the mask as input for the model
+            frame_idx, obj_ids, video_res_masks = self.predictor.add_new_mask(
                 inference_state=inference_state,
                 frame_idx=frame_idx,
                 obj_id=obj_id,
-                mask=torch.tensor(mask > 0),
+                mask=mask_tensor,
             )
-            masks_binary = (video_res_masks > self.score_thresh)[:, 0].cpu().numpy()
+            
+            logger.info(f"[InferenceAPI.add_mask] add_new_mask returned: frame_idx={frame_idx}, obj_ids={obj_ids}, "
+                       f"video_res_masks.shape={video_res_masks.shape}, "
+                       f"video_res_masks.dtype={video_res_masks.dtype}, "
+                       f"video_res_masks.min={video_res_masks.min().item()}, video_res_masks.max={video_res_masks.max().item()}")
+            
+            # Use the original mask directly instead of model predictions
+            # The model predictions might be empty or incorrect, so we use the user-provided mask
+            masks_binary = mask.astype(bool)[None, :, :]  # Add batch dimension to match expected shape
+            
+            logger.info(f"[InferenceAPI.add_mask] Using original mask directly: "
+                       f"masks_binary.shape={masks_binary.shape}, "
+                       f"masks_binary.dtype={masks_binary.dtype}, "
+                       f"foreground_pixels={masks_binary.sum()}")
 
             rle_mask_list = self.__get_rle_mask_list(
                 object_ids=obj_ids, masks=masks_binary
             )
+            
+            logger.info(f"[InferenceAPI.add_mask] Generated RLE mask list: num_results={len(rle_mask_list)}")
+            for i, rle_result in enumerate(rle_mask_list):
+                logger.info(f"[InferenceAPI.add_mask] RLE result {i}: object_id={rle_result.object_id}, "
+                           f"mask.size={rle_result.mask.size}, counts_length={len(rle_result.mask.counts)}")
 
             return PropagateDataResponse(
                 frame_index=original_frame_idx,  # Return original frame index

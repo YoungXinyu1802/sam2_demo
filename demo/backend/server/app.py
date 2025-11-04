@@ -9,6 +9,8 @@ from typing import Any, Generator
 from app_conf import (
     GALLERY_PATH,
     GALLERY_PREFIX,
+    MASKS_PATH,
+    MASKS_PREFIX,
     POSTERS_PATH,
     POSTERS_PREFIX,
     UPLOADS_PATH,
@@ -20,6 +22,7 @@ from data.store import set_videos
 from flask import Flask, make_response, Request, request, Response, send_from_directory
 from flask_cors import CORS
 from inference.data_types import (
+    AddMaskRequest,
     ApplyLoraCandidateRequest,
     EnableLoRAModeRequest,
     DisableLoRAModeRequest,
@@ -84,6 +87,17 @@ def send_uploaded_video(path: str):
         raise ValueError("resource not found")
 
 
+@app.route(f"/{MASKS_PREFIX}/<path:path>", methods=["GET"])
+def send_mask_image(path: str):
+    try:
+        return send_from_directory(
+            MASKS_PATH,
+            path,
+        )
+    except:
+        raise ValueError("resource not found")
+
+
 # TOOD: Protect route with ToS permission check
 @app.route("/propagate_in_video", methods=["POST"])
 def propagate_in_video() -> Response:
@@ -110,6 +124,39 @@ def propagate_to_frame() -> Response:
     
     response = inference_api.propagate_to_frame(request=req)
     return make_response(response.to_json(), 200)
+
+
+# TOOD: Protect route with ToS permission check
+@app.route("/add_mask", methods=["POST"])
+def add_mask() -> Response:
+    try:
+        data = request.json
+        logger.info(f"Received add_mask request: session={data.get('session_id')}, obj={data.get('object_id')}, frame={data.get('frame_index')}")
+        from inference.data_types import Mask
+        mask_data = data["mask"]
+        
+        # Log mask data received
+        logger.info(f"[add_mask] Received mask data: size={mask_data.get('size')}, counts_length={len(mask_data.get('counts', []))}")
+        
+        req = AddMaskRequest(
+            type="add_mask",
+            session_id=data["session_id"],
+            frame_index=data["frame_index"],
+            object_id=data["object_id"],
+            mask=Mask(size=mask_data["size"], counts=mask_data["counts"]),
+        )
+        
+        response = inference_api.add_mask(request=req)
+        
+        # Log response
+        logger.info(f"[add_mask] Response: frame_index={response.frame_index}, num_results={len(response.results)}")
+        for i, result in enumerate(response.results):
+            logger.info(f"[add_mask] Result {i}: object_id={result.object_id}, mask_size={result.mask.size}, counts_length={len(result.mask.counts)}")
+        
+        return make_response(response.to_json(), 200)
+    except Exception as e:
+        logger.error(f"Error in add_mask: {e}", exc_info=True)
+        return make_response({"error": str(e)}, 500)
 
 
 # TOOD: Protect route with ToS permission check

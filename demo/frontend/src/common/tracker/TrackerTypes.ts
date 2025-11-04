@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import {RLEObject} from '@/jscocotools/mask';
 import {SegmentationPoint} from '@/common/tracker/Tracker';
 import {TrackerOptions, Trackers} from '@/common/tracker/Trackers';
 import {
@@ -69,6 +70,14 @@ export type UpdatePointsRequest = Request<
     points: SegmentationPoint[];
   }
 >;
+export type AddMaskRequest = Request<
+  'addMask',
+  {
+    frameIndex: number;
+    objectId: number;
+    rleMask: RLEObject;
+  }
+>;
 export type ClearPointsInFrameRequest = Request<
   'clearPointsInFrame',
   {
@@ -122,6 +131,7 @@ export type TrackerRequest =
   | CreateTrackletRequest
   | DeleteTrackletRequest
   | UpdatePointsRequest
+  | AddMaskRequest
   | ClearPointsInFrameRequest
   | ClearPointsInVideoRequest
   | StreamMasksRequest
