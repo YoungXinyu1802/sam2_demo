@@ -133,9 +133,11 @@ export async function generateThumbnail(
   frame: VideoFrame,
   ctx: OffscreenCanvasRenderingContext2D,
 ): Promise<void> {
-  // If a frame doesn't have points, the points will be undefined.
+  // Generate thumbnail if there are points OR if there's a non-empty mask
+  // This allows thumbnails to be generated when masks are loaded from files
   const hasPoints = (track.points[frameIndex]?.length ?? 0) > 0;
-  if (!hasPoints) {
+  const hasMask = mask != null && !mask.isEmpty;
+  if (!hasPoints && !hasMask) {
     return;
   }
   invariant(frame !== null, 'frame must be ready');
