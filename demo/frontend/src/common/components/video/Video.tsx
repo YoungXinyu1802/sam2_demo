@@ -121,12 +121,13 @@ export type VideoRef = {
   logAnnotations(): void;
   createTracklet(): Promise<BaseTracklet>;
   deleteTracklet(trackletId: number): Promise<void>;
-  updatePoints(trackletId: number, points: SegmentationPoint[]): void;
+  updatePoints(trackletId: number, points: SegmentationPoint[]): Promise<boolean>;
   addMask(frameIndex: number, objectId: number, rleMask: RLEObject): Promise<void>;
   clearPointsInVideo(): Promise<boolean>;
   enableFrameTracking(): void;
   disableFrameTracking(): void;
   setTrackingFps(fps: number): void;
+  trackFrame(frameIndex: number): Promise<void>;
   getFrameSamplingInterval(): number;
   getSampledFrames(maxFrames?: number): number[];
   enableLITLoRAMode(): Promise<void>;
@@ -256,8 +257,8 @@ export default forwardRef<VideoRef, Props>(function Video(
       deleteTracklet(trackletId: number): Promise<void> {
         return bridge.deleteTracklet(trackletId);
       },
-      updatePoints(trackletId: number, points: SegmentationPoint[]): void {
-        bridge.updatePoints(trackletId, points);
+      updatePoints(trackletId: number, points: SegmentationPoint[]): Promise<boolean> {
+        return bridge.updatePoints(trackletId, points);
       },
       addMask(frameIndex: number, objectId: number, rleMask: RLEObject): Promise<void> {
         return bridge.addMask(frameIndex, objectId, rleMask);
@@ -273,6 +274,9 @@ export default forwardRef<VideoRef, Props>(function Video(
       },
       setTrackingFps(fps: number): void {
         bridge.setTrackingFps(fps);
+      },
+      trackFrame(frameIndex: number): Promise<void> {
+        return bridge.trackFrame(frameIndex);
       },
       getFrameSamplingInterval(): number {
         return bridge.getFrameSamplingInterval();

@@ -217,7 +217,14 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
   ]);
 
   async function handleOptimisticPointUpdate(newPoints: SegmentationPoint[]) {
+    console.log('[DemoVideoEditor] handleOptimisticPointUpdate called', {
+      newPointsLength: newPoints.length,
+      activeTrackletId,
+      session: session != null,
+    });
+    
     if (session == null) {
+      console.warn('[DemoVideoEditor] No session, cannot update points');
       return;
     }
 
@@ -228,15 +235,37 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
       const tracklet = await video?.createTracklet();
       if (tracklet != null && newPoints.length > 0) {
         setActiveTrackletObjectId(tracklet.id);
-        video?.updatePoints(tracklet.id, [newPoints[newPoints.length - 1]]);
+        await video?.updatePoints(tracklet.id, [newPoints[newPoints.length - 1]]);
       }
     }
 
     if (activeTrackletId != null) {
-      video?.updatePoints(activeTrackletId, newPoints);
+      await video?.updatePoints(activeTrackletId, newPoints);
     } else {
       await createActiveTracklet();
     }
+
+    // If frame tracking is enabled and video is paused, encode the mask and propagate
+    // This ensures the updated mask is encoded and used for the next frame
+    // Similar to what happens in propagate frame by frame
+    if (frameTrackingEnabled && !isPlaying && video) {
+      try {
+        const frameInterval = video.getFrameSamplingInterval();
+        // Only track if this is a sampled frame (frame tracking works on sampled frames)
+        if (frameInterval > 0 && frameIndex % frameInterval === 0) {
+          // Calculate reindexed frame index for frame tracking
+          const reindexedFrame = Math.floor(frameIndex / frameInterval);
+          console.log(`[DemoVideoEditor] Frame tracking enabled, encoding mask for frame ${frameIndex} (reindexed: ${reindexedFrame})`);
+          await video.trackFrame(reindexedFrame);
+        } else {
+          console.log(`[DemoVideoEditor] Frame ${frameIndex} is not a sampled frame (interval: ${frameInterval}), skipping trackFrame`);
+        }
+      } catch (error) {
+        console.error('[DemoVideoEditor] Error in trackFrame after adding points:', error);
+        // Don't block the click if trackFrame fails
+      }
+    }
+
     enqueueMessage('pointClick');
     
     // Log clicks for behavior tracking
@@ -253,24 +282,47 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
   }
 
   async function handleAddPoint(point: SegmentationPoint) {
-    if (streamingState === 'partial' || streamingState === 'requesting') {
+    console.log('[DemoVideoEditor] handleAddPoint called', {
+      streamingState,
+      isPlaying,
+      frameTrackingEnabled,
+      frameIndex,
+      session: session != null,
+    });
+    
+    // Block clicks only if actively streaming/requesting
+    // 'partial' state just means frame-by-frame mode is available, not that we're actively processing
+    // When video is paused, always allow clicks (except when actively requesting)
+    if (streamingState === 'requesting' || streamingState === 'aborting') {
+      console.log('[DemoVideoEditor] Blocking click: streamingState is', streamingState);
       return;
     }
     if (isPlaying) {
-      return video?.pause();
+      console.log('[DemoVideoEditor] Video is playing, pausing first');
+      video?.pause();
+      return;
     }
-    handleOptimisticPointUpdate([...points, point]);
+    // Await to ensure the async operations complete
+    try {
+      await handleOptimisticPointUpdate([...points, point]);
+      console.log('[DemoVideoEditor] handleAddPoint completed successfully');
+    } catch (error) {
+      console.error('[DemoVideoEditor] Error in handleAddPoint:', error);
+    }
   }
 
-  function handleRemovePoint(point: SegmentationPoint) {
+  async function handleRemovePoint(point: SegmentationPoint) {
+    // Block point removal only if actively streaming/requesting or if playing
+    // When video is paused, allow point removal even if state is 'partial'
     if (
       isPlaying ||
-      streamingState === 'partial' ||
-      streamingState === 'requesting'
+      streamingState === 'requesting' ||
+      streamingState === 'aborting'
     ) {
       return;
     }
-    handleOptimisticPointUpdate(points.filter(p => p !== point));
+    // Await to ensure the async operations complete
+    await handleOptimisticPointUpdate(points.filter(p => p !== point));
   }
 
   // The interaction layer handles clicks onto the video canvas. It is used

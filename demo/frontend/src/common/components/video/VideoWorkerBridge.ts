@@ -503,9 +503,28 @@ export default class VideoWorkerBridge extends EventEmitter<VideoWorkerEventMap>
     });
   }
 
-  trackFrame(frameIndex: number): void {
-    this.sendRequest<TrackFrameRequest>('trackFrame', {
-      frameIndex,
+  trackFrame(frameIndex: number): Promise<void> {
+    return new Promise(resolve => {
+      // trackFrame updates masks, which triggers a TrackletsUpdatedResponse
+      // We wait for that response to know when tracking is complete
+      // Add a timeout to prevent hanging if the response never comes
+      const timeout = setTimeout(() => {
+        this.worker.removeEventListener('message', handleResponse);
+        console.warn(`[VideoWorkerBridge] trackFrame timeout for frame ${frameIndex}`);
+        resolve(); // Resolve instead of reject to not block the UI
+      }, 30000); // 30 second timeout
+      
+      const handleResponse = (event: MessageEvent<TrackletsUpdatedResponse>) => {
+        if (event.data.action === 'trackletsUpdated') {
+          clearTimeout(timeout);
+          this.worker.removeEventListener('message', handleResponse);
+          resolve();
+        }
+      };
+      this.worker.addEventListener('message', handleResponse);
+      this.sendRequest<TrackFrameRequest>('trackFrame', {
+        frameIndex,
+      });
     });
   }
 
