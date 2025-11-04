@@ -1231,7 +1231,7 @@ class SAM2VideoPredictor(SAM2Base):
     def train_lora(self, 
         model, 
         gt_mask, 
-        training_epoch=300, 
+        training_epoch=40, 
         mode='init', 
         model_idx=None,
         replay=False,
@@ -1295,7 +1295,7 @@ class SAM2VideoPredictor(SAM2Base):
                 train_set = [train_data_point]
             optimizer = torch.optim.AdamW(
                 [p for p in model.parameters() if p.requires_grad],
-                lr=5e-5,  # smaller LR for fine-tuning
+                lr=1e-4,  # smaller LR for fine-tuning
                 weight_decay=0,
             )
         _, best_val_iou = train_with_random_split_each_epoch(
@@ -1319,9 +1319,9 @@ class SAM2VideoPredictor(SAM2Base):
         )
         if mode == 'init':
             self.multi_lora.append(model)
-            self.correction_buff_moe[len(self.correction_buff_moe)] = [buffer_data_point]
-        if mode == 'finetune':
-            self.correction_buff_moe[model_idx].append(buffer_data_point)
+            # self.correction_buff_moe[len(self.correction_buff_moe)] = [buffer_data_point]
+        # if mode == 'finetune':
+        #     self.correction_buff_moe[model_idx].append(buffer_data_point)
         self.trained_lora = True
         return True
 

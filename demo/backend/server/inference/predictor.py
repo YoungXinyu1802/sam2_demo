@@ -736,7 +736,7 @@ class InferenceAPI:
                     frame_idx=frame_idx,
                     obj_id=obj_id,
                     mask=input_mask,
-                    run_mem_encoder=True
+                    run_mem_encoder=False
                 )
                 
                 # Train LoRA IMMEDIATELY after adding mask (following online_eval.py workflow)
@@ -744,14 +744,17 @@ class InferenceAPI:
                 if not hasattr(self.predictor, 'trained_lora') or not self.predictor.trained_lora:
                     # First correction: train initial LoRA model
                     logger.info("Training initial LoRA model")
-                    
-                    # Debug: Check if features were captured
-                    if hasattr(self.predictor, 'temp_feat_for_lora'):
-                        pix_feat = self.predictor.temp_feat_for_lora.get("pix_feat_with_mem")
-                        if pix_feat is None:
-                            logger.error(f"Features not captured! temp_feat_for_lora: {self.predictor.temp_feat_for_lora.keys()}")
-                        else:
-                            logger.info(f"Features captured successfully. Shape: {pix_feat.shape}")
+
+                    logger.info(f"temp_feat_for_lora: {self.predictor.temp_feat_for_lora.keys()}")
+                    frame_idx = self.predictor.temp_feat_for_lora.get("frame_idx")
+                    logger.info(f"temp_feat_for_lora frame_idx: {frame_idx}")
+                    # # Debug: Check if features were captured
+                    # if hasattr(self.predictor, 'temp_feat_for_lora'):
+                    #     pix_feat = self.predictor.temp_feat_for_lora.get("pix_feat_with_mem")
+                    #     if pix_feat is None:
+                    #         logger.error(f"Features not captured! temp_feat_for_lora: {self.predictor.temp_feat_for_lora.keys()}")
+                    #     else:
+                    #         logger.info(f"Features captured successfully. Shape: {pix_feat.shape}")
                     
                     mask_decoder_lora = copy.deepcopy(self.predictor.sam_mask_decoder)
                     self.predictor.convert_to_lora(mask_decoder_lora.transformer)
@@ -761,17 +764,27 @@ class InferenceAPI:
                         mask_decoder_lora, 
                         mask,  # Use the GT mask
                         training_epoch=100,
-                        mode='init'
+                        mode='init',
+                        model_idx=0
                     )
                     
                     if training_success:
                         logger.info("Initial LoRA model trained successfully")
                     else:
                         logger.warning("LoRA training failed - features may not have been captured")
-                else:
+                    self.predictor.trained_lora = True
+                elif self.predictor.trained_lora:
                     # Subsequent corrections: could fine-tune existing LoRA
                     logger.info("LoRA already trained, could fine-tune in future")
                     # For now, we'll just add to training data for potential future fine-tuning
+                    self.predictor.train_lora(
+                        self.predictor.multi_lora[len(self.predictor.multi_lora) - 1],
+                        mask,
+                        training_epoch=40,
+                        mode='finetune',
+                        model_idx=0
+                    )
+
                 
                 # Store the GT mask for tracking
                 self.lora_training_data[session_id][obj_id].append({
@@ -834,14 +847,14 @@ class InferenceAPI:
                         candidates=[]
                     )
                 
-                # First, propagate to frame to capture features
-                try:
-                    _, _, _ = self.predictor.propagate_to_frame(
-                        inference_state=inference_state,
-                        frame_idx=frame_idx,
-                    )
-                except Exception as e:
-                    logger.warning(f"Could not propagate to frame {frame_idx}: {e}")
+                # # First, propagate to frame to capture features
+                # try:
+                #     _, _, _ = self.predictor.propagate_to_frame(
+                #         inference_state=inference_state,
+                #         frame_idx=frame_idx,
+                #     )
+                # except Exception as e:
+                #     logger.warning(f"Could not propagate to frame {frame_idx}: {e}")
                 
                 # Generate candidates from ALL LoRA models
                 logger.info(f"Generating predictions from all LoRA models for frame {frame_idx}")

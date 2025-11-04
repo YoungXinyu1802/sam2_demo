@@ -785,7 +785,7 @@ class SAM2Base(torch.nn.Module):
                 multimask_output=multimask_output,
             )
             
-            if self.LIT_LoRA_mode:
+            if self.LIT_LoRA_mode and frame_idx != self.temp_feat_for_lora["frame_idx"]:
                 self.temp_feat_for_lora["frame_idx"] = frame_idx
                 self.temp_feat_for_lora["current_vision_feats"] = current_vision_feats
                 self.temp_feat_for_lora["feat_sizes"] = feat_sizes
