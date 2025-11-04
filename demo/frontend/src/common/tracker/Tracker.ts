@@ -125,8 +125,8 @@ export abstract class Tracker implements ITracker {
   abstract startOver(): Promise<void>;
   abstract finishCorrection(): void;
   abstract enableStats(): void;
-  abstract logPlayEvent(): void;
-  abstract logPauseEvent(): void;
+  abstract logPlayEvent(): void | Promise<void>;
+  abstract logPauseEvent(): void | Promise<void>;
 
   // PRIVATE FUNCTIONS
 

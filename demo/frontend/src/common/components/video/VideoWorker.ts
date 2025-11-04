@@ -57,11 +57,11 @@ self.addEventListener(
         // Playback
         case 'play':
           context.play();
-          tracker?.logPlayEvent();
+          await tracker?.logPlayEvent();
           break;
         case 'pause':
           context.pause();
-          tracker?.logPauseEvent();
+          await tracker?.logPauseEvent();
           break;
         case 'stop':
           context.stop();

@@ -95,6 +95,9 @@ export class SAM2Model extends Tracker {
   private _streamingStartFrame: number = 0; // Start frame for streaming
   private _litLoRAModeEnabled: boolean = false;
   private _trackingFps: number = 5; // Default tracking FPS
+  private _correctionFinished: boolean = false; // Track if correction was finished
+  private _isFirstPause: boolean = true; // Track if this is the first pause after tracking
+  private _pendingCorrections: Map<number, Set<number>> = new Map(); // Track corrections: frameIndex -> Set<objectId>
 
   private _emptyMask: RLEObject | null = null;
 
@@ -340,6 +343,15 @@ export class SAM2Model extends Tracker {
       this._updateStreamingState('required');
     }
 
+    // Track correction for LoRA training if LoRA mode is enabled
+    if (this._litLoRAModeEnabled) {
+      if (!this._pendingCorrections.has(frameIndex)) {
+        this._pendingCorrections.set(frameIndex, new Set());
+      }
+      this._pendingCorrections.get(frameIndex)!.add(objectId);
+      Logger.info(`[updatePoints] Tracked correction for object ${objectId} at frame ${frameIndex}`);
+    }
+
     // Clear all points in frame if no points are provided.
     if (points.length === 0) {
       return this.clearPointsInFrame(frameIndex, objectId);
@@ -412,8 +424,17 @@ export class SAM2Model extends Tracker {
     );
 
     // Mark session needing propagation when mask is set
-    if (!this._frameTrackingEnabled) {
+    if (!this._frameTrackingEnabled && !this._streamingModeEnabled) {
       this._updateStreamingState('required');
+    }
+
+    // Track correction for LoRA training if LoRA mode is enabled
+    if (this._litLoRAModeEnabled) {
+      if (!this._pendingCorrections.has(frameIndex)) {
+        this._pendingCorrections.set(frameIndex, new Set());
+      }
+      this._pendingCorrections.get(frameIndex)!.add(objectId);
+      Logger.info(`[addMask] Tracked correction for object ${objectId} at frame ${frameIndex}`);
     }
 
     return new Promise((resolve, reject) => {
@@ -999,6 +1020,10 @@ export class SAM2Model extends Tracker {
       Logger.info('Backend LoRA mode enabled:', result);
       
       this._litLoRAModeEnabled = true;
+      // Reset flags when LoRA mode is enabled
+      this._isFirstPause = true;
+      this._correctionFinished = false;
+      this._pendingCorrections.clear();
       Logger.info('LIT_LoRA mode enabled');
     } catch (error) {
       Logger.error('Failed to enable LoRA mode:', error);
@@ -1041,47 +1066,125 @@ export class SAM2Model extends Tracker {
   }
 
   public finishCorrection(): void {
-    if (!this._litLoRAModeEnabled || !this._frameTrackingEnabled) {
-      Logger.warn('Cannot finish correction: LIT_LoRA mode or frame tracking not enabled');
+    if (!this._litLoRAModeEnabled) {
+      Logger.warn('Cannot finish correction: LIT_LoRA mode not enabled');
       return;
     }
 
-    // Send the current frame's masks for all tracklets as training data
-    const frameIndex = this._context.frameIndex;
-    const trackletIds = Object.keys(this._session.tracklets).map(Number);
-
-    for (const objectId of trackletIds) {
-      const tracklet = this._session.tracklets[objectId];
-      if (tracklet && tracklet.isInitialized) {
-        // Get the latest mask for this object at this frame
-        const mask = tracklet.masks[frameIndex];
-        if (mask && mask.data) {
-          // mask.data can be Blob or RLEObject, we need the RLEObject
-          const rleData = mask.data;
-          // Type guard: check if it's an RLEObject (has size and counts properties)
-          if ('size' in rleData && 'counts' in rleData) {
-            const rleObject: RLEObject = {
-              size: rleData.size as [number, number],
-              counts: rleData.counts,
-            };
-            this._sendLoRATrainingData(frameIndex, objectId, rleObject);
-            Logger.info(`Sent training data for object ${objectId} at frame ${frameIndex}`);
-          }
-        }
-      }
+    // Check if either frame tracking or streaming mode is enabled
+    if (!this._frameTrackingEnabled && !this._streamingModeEnabled) {
+      Logger.warn('Cannot finish correction: Frame tracking or streaming mode not enabled');
+      return;
     }
+
+    // Mark that correction is finished - training will happen when play is clicked
+    this._correctionFinished = true;
+    Logger.info('Correction finished - training will happen when play is clicked');
   }
 
   public enableStats(): void {
     this._stats = new Stats('ms', 'D', 1000 / 25);
   }
 
-  public logPlayEvent(): void {
-    // No-op: tracking handled in main thread
+  public async logPlayEvent(): Promise<void> {
+    // Train LoRA if there are pending corrections or if correction was explicitly finished
+    if (this._litLoRAModeEnabled && (this._pendingCorrections.size > 0 || this._correctionFinished)) {
+      Logger.info('Training LoRA - pending corrections detected');
+      
+      // Wait a bit for any ongoing propagation to complete
+      // This ensures masks are up-to-date before training
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Process all pending corrections
+      const correctionsToProcess = new Map(this._pendingCorrections);
+      this._pendingCorrections.clear();
+      
+      // Also handle explicit finishCorrection case
+      if (this._correctionFinished) {
+        const currentFrameIndex = this._context.frameIndex;
+        if (!correctionsToProcess.has(currentFrameIndex)) {
+          correctionsToProcess.set(currentFrameIndex, new Set());
+        }
+        const trackletIds = Object.keys(this._session.tracklets).map(Number);
+        const currentFrameSet = correctionsToProcess.get(currentFrameIndex)!;
+        trackletIds.forEach(id => currentFrameSet.add(id));
+        this._correctionFinished = false;
+      }
+
+      Logger.info(`[logPlayEvent] Processing ${correctionsToProcess.size} correction frame(s)`);
+
+      for (const [frameIndex, objectIds] of correctionsToProcess.entries()) {
+        Logger.info(`[logPlayEvent] Training LoRA for frame ${frameIndex}, objects: ${Array.from(objectIds).join(',')}`);
+        
+        for (const objectId of objectIds) {
+          const tracklet = this._session.tracklets[objectId];
+          if (tracklet && tracklet.isInitialized) {
+            // Wait for mask to be available (with timeout)
+            let mask = tracklet.masks[frameIndex];
+            let attempts = 0;
+            const maxAttempts = 10;
+            const waitTime = 50; // ms
+            
+            // Wait for mask to be available if it's not there yet
+            while (!mask && attempts < maxAttempts) {
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+              mask = tracklet.masks[frameIndex];
+              attempts++;
+            }
+            
+            Logger.info(`[logPlayEvent] Object ${objectId} at frame ${frameIndex}: mask=${mask != null}, isEmpty=${mask?.isEmpty ?? 'N/A'}, attempts=${attempts}`);
+            
+            if (mask && mask.data && !mask.isEmpty) {
+              // mask.data can be Blob or RLEObject, we need the RLEObject
+              const rleData = mask.data;
+              // Type guard: check if it's an RLEObject (has size and counts properties)
+              if ('size' in rleData && 'counts' in rleData) {
+                const rleObject: RLEObject = {
+                  size: rleData.size as [number, number],
+                  counts: rleData.counts,
+                };
+                Logger.info(`[logPlayEvent] Sending training data for object ${objectId} at frame ${frameIndex}`);
+                try {
+                  await this._sendLoRATrainingData(frameIndex, objectId, rleObject);
+                  Logger.info(`Successfully sent training data for object ${objectId} at frame ${frameIndex}`);
+                } catch (error) {
+                  Logger.error(`Failed to send training data for object ${objectId} at frame ${frameIndex}:`, error);
+                }
+              } else {
+                Logger.warn(`[logPlayEvent] Mask data for object ${objectId} is not an RLEObject`);
+              }
+            } else {
+              Logger.warn(`[logPlayEvent] No valid mask found for object ${objectId} at frame ${frameIndex} after ${attempts} attempts`);
+            }
+          } else {
+            Logger.warn(`[logPlayEvent] Tracklet ${objectId} not initialized or not found`);
+          }
+        }
+      }
+    } else {
+      Logger.info(`[logPlayEvent] Not training: _litLoRAModeEnabled=${this._litLoRAModeEnabled}, pendingCorrections=${this._pendingCorrections.size}, _correctionFinished=${this._correctionFinished}`);
+    }
   }
 
-  public logPauseEvent(): void {
-    // No-op: LoRA candidate generation is now manual via button
+  public async logPauseEvent(): Promise<void> {
+    // If this is the first pause, trained_lora should be false (already handled by reset_lora)
+    if (this._isFirstPause) {
+      this._isFirstPause = false;
+      Logger.info('First pause - trained_lora is false');
+      return;
+    }
+
+    // If LoRA is trained, generate candidates automatically
+    if (this._litLoRAModeEnabled) {
+      // Check if LoRA is trained by trying to generate candidates
+      // The backend will return an error if not trained, which we'll handle gracefully
+      try {
+        await this.generateLoraCandidates();
+        Logger.info('LoRA candidates generated automatically on pause');
+      } catch (error) {
+        Logger.info('LoRA not trained yet, skipping candidate generation');
+      }
+    }
   }
 
   public async generateLoraCandidates(): Promise<void> {

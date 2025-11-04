@@ -34,10 +34,11 @@ export default function LITLoRAModeButton() {
   );
 
   // Note: LoRA mode can now be enabled before objects are initialized
+  // Allow toggling LoRA mode even during streaming (partial state)
+  // Only disable during active operations (requesting, aborting)
 
   const isDisabled =
     streamingState === 'requesting' ||
-    streamingState === 'partial' ||
     streamingState === 'aborting';
 
   const handleToggleLITLoRAMode = useCallback(async () => {

@@ -546,7 +546,11 @@ class SAM2VideoPredictor(SAM2Base):
                 # via `add_new_points_or_box` or `add_new_mask`)
                 for frame_idx, out in obj_temp_output_dict[storage_key].items():
                     # Run memory encoder on the temporary outputs (if the memory feature is missing)
-                    if out["maskmem_features"] is None:
+                    # Also re-encode if this frame already exists in output_dict (correction case),
+                    # to ensure corrected masks are properly encoded into memory for future frames
+                    frame_already_exists = frame_idx in obj_output_dict[storage_key]
+                    if out["maskmem_features"] is None or frame_already_exists:
+                        # Re-encode memory features to ensure corrected masks propagate to future frames
                         high_res_masks = torch.nn.functional.interpolate(
                             out["pred_masks"].to(inference_state["device"]),
                             size=(self.image_size, self.image_size),
@@ -565,6 +569,7 @@ class SAM2VideoPredictor(SAM2Base):
                         out["maskmem_features"] = maskmem_features
                         out["maskmem_pos_enc"] = maskmem_pos_enc
 
+                    # Store/update the output dict (this will overwrite existing entries for corrections)
                     obj_output_dict[storage_key][frame_idx] = out
                     if self.clear_non_cond_mem_around_input:
                         # clear non-conditioning memory of the surrounding frames

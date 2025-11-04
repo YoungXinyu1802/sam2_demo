@@ -878,25 +878,19 @@ export default class VideoWorkerContext {
       const masks: Mask[] = [];
       const colors: string[] = [];
       const tracklets: Tracklet[] = [];
-      console.log(`[VideoWorkerContext._drawFrameImpl] Drawing frame ${frameIndex}, numTracklets=${this._tracklets.length}`);
-      this._tracklets.forEach((tracklet, idx) => {
+      this._tracklets.forEach((tracklet) => {
         const mask = tracklet.masks[frameIndex];
-        console.log(`[VideoWorkerContext._drawFrameImpl] Tracklet ${idx} (id=${tracklet.id}): mask at frame ${frameIndex} = ${mask != null}, isEmpty=${mask?.isEmpty ?? 'N/A'}`);
         if (mask != null && !mask.isEmpty) {
           masks.push(mask);
           tracklets.push(tracklet);
           colors.push(tracklet.color);
-        } else if (mask != null && mask.isEmpty) {
-          console.log(`[VideoWorkerContext._drawFrameImpl] Skipping empty mask for tracklet ${idx} (id=${tracklet.id})`);
         }
       });
-      console.log(`[VideoWorkerContext._drawFrameImpl] Collected ${masks.length} masks for rendering`);
       const effectActionPoint = this._currentSegmetationPoint;
 
       this._stats.maskBmp?.begin();
 
-      const effectMaskPromises = masks.map(async ({data, bounds, isEmpty}) => {
-        console.log(`[VideoWorkerContext._drawFrameImpl] Processing mask: bounds=${JSON.stringify(bounds)}, isEmpty=${isEmpty}, data.size=${(data as RLEObject).size}, data.counts.length=${(data as RLEObject).counts.length}`);
+      const effectMaskPromises = masks.map(async ({data, bounds}) => {
         return {
           bounds,
           bitmap: data as RLEObject,
@@ -915,8 +909,6 @@ export default class VideoWorkerContext {
       const effectMasks = await Promise.all([...effectMaskPromises, ...loraCandidatePromises]);
 
       this._stats.maskBmp?.end();
-
-      console.log(`[VideoWorkerContext._drawFrameImpl] Effect masks prepared: ${effectMasks.length} masks, ${colors.length} colors`);
 
       form.ctx.fillStyle = 'rgba(0, 0, 0, 0)';
       form.ctx.fillRect(0, 0, this.width, this.height);

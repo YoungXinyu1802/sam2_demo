@@ -43,6 +43,7 @@ import {
   isAddObjectEnabledAtom,
   isPlayingAtom,
   isVideoLoadingAtom,
+  litLoRAModeEnabledAtom,
   loraMaskCandidatesAtom,
   pointsAtom,
   sessionAtom,
@@ -110,6 +111,7 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
   const setTrackletObjects = useSetAtom(trackletObjectsAtom);
   const setFrameIndex = useSetAtom(frameIndexAtom);
   const setLoraCandidates = useSetAtom(loraMaskCandidatesAtom);
+  const setIsLITLoRAModeEnabled = useSetAtom(litLoRAModeEnabledAtom);
   const frameIndex = useAtomValue(frameIndexAtom);
   const points = useAtomValue(pointsAtom);
   const isAddObjectEnabled = useAtomValue(isAddObjectEnabledAtom);
@@ -157,6 +159,15 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
       setSession({id: event.sessionId, ranPropagation: false});
       // Start behavior tracking for this session
       behaviorTracker.startSession(event.sessionId, inputVideo.path);
+      // Enable LoRA mode automatically when session starts
+      video?.enableLITLoRAMode()
+        .then(() => {
+          // Update the atom state so the UI reflects that LoRA is enabled
+          setIsLITLoRAModeEnabled(true);
+        })
+        .catch(error => {
+          console.error('[DemoVideoEditor] Failed to enable LoRA mode:', error);
+        });
     }
 
     video?.addEventListener('sessionStarted', onSessionStarted);

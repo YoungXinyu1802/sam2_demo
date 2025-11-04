@@ -808,16 +808,36 @@ class InferenceAPI:
                         logger.warning("LoRA training failed - features may not have been captured")
                     self.predictor.trained_lora = True
                 elif self.predictor.trained_lora:
-                    # Subsequent corrections: could fine-tune existing LoRA
-                    logger.info("LoRA already trained, could fine-tune in future")
-                    # For now, we'll just add to training data for potential future fine-tuning
-                    self.predictor.train_lora(
-                        self.predictor.multi_lora[len(self.predictor.multi_lora) - 1],
-                        mask,
-                        training_epoch=40,
-                        mode='finetune',
-                        model_idx=0
-                    )
+                    # Subsequent corrections: fine-tune existing LoRA
+                    logger.info("LoRA already trained, fine-tuning existing LoRA model")
+                    if len(self.predictor.multi_lora) > 0:
+                        fine_tune_model = self.predictor.multi_lora[len(self.predictor.multi_lora) - 1]
+                        training_success = self.predictor.train_lora(
+                            fine_tune_model,
+                            mask,
+                            training_epoch=40,
+                            mode='finetune',
+                            model_idx=0
+                        )
+                        if training_success:
+                            logger.info("LoRA fine-tuning completed successfully")
+                        else:
+                            logger.warning("LoRA fine-tuning failed")
+                    else:
+                        logger.warning("No LoRA model to fine-tune, creating new one")
+                        # If no LoRA model exists, create a new one
+                        mask_decoder_lora = copy.deepcopy(self.predictor.sam_mask_decoder)
+                        self.predictor.convert_to_lora(mask_decoder_lora.transformer)
+                        self.predictor.freeze_non_lora(mask_decoder_lora)
+                        training_success = self.predictor.train_lora(
+                            mask_decoder_lora,
+                            mask,
+                            training_epoch=100,
+                            mode='init',
+                            model_idx=0
+                        )
+                        if training_success:
+                            self.predictor.trained_lora = True
 
                 
                 # Store the GT mask for tracking

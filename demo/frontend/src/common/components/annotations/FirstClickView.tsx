@@ -23,10 +23,12 @@ import {useEffect, useRef, useState} from 'react';
 import {useAtom, useAtomValue, useSetAtom} from 'jotai';
 import {
   activeTrackletObjectIdAtom,
+  litLoRAModeEnabledAtom,
   sessionAtom,
   trackletObjectsAtom,
 } from '@/demo/atoms';
 import PrimaryCTAButton from '@/common/components/button/PrimaryCTAButton';
+import LITLoRAModeButton from '@/common/components/button/LITLoRAModeButton';
 
 type Props = {
   video?: VideoData;
@@ -40,7 +42,22 @@ export default function FirstClickView({video}: Props) {
   const [activeTrackletId] = useAtom(activeTrackletObjectIdAtom);
   const setActiveTrackletId = useSetAtom(activeTrackletObjectIdAtom);
   const tracklets = useAtomValue(trackletObjectsAtom);
+  const setIsLITLoRAModeEnabled = useSetAtom(litLoRAModeEnabledAtom);
   const [isLoadingMask, setIsLoadingMask] = useState(false);
+
+  // Enable LoRA mode automatically when session is available
+  useEffect(() => {
+    if (session && videoWorker) {
+      videoWorker.enableLITLoRAMode()
+        .then(() => {
+          // Update the atom state so the UI reflects that LoRA is enabled
+          setIsLITLoRAModeEnabled(true);
+        })
+        .catch(error => {
+          console.error('[FirstClickView] Failed to enable LoRA mode:', error);
+        });
+    }
+  }, [session, videoWorker, setIsLITLoRAModeEnabled]);
 
   useEffect(() => {
     if (!isFirstClickMessageShown.current) {
@@ -140,6 +157,14 @@ export default function FirstClickView({video}: Props) {
               onClick={handleLoadMask}>
               {isLoadingMask ? 'Loading mask...' : 'Load mask from file'}
             </PrimaryCTAButton>
+          </div>
+        )}
+        {session && (
+          <div className="flex flex-col gap-4">
+            <p className="!text-gray-60">
+              Enable LoRA mode for enhanced tracking:
+            </p>
+            <LITLoRAModeButton />
           </div>
         )}
       </div>

@@ -21,6 +21,7 @@ import useVideo from '@/common/components/video/editor/useVideo';
 import {
   areTrackletObjectsInitializedAtom,
   isStreamingAtom,
+  litLoRAModeEnabledAtom,
   sessionAtom,
   streamingStateAtom,
 } from '@/demo/atoms';
@@ -34,6 +35,7 @@ export default function TrackAndPlayButton() {
   const streamingState = useAtomValue(streamingStateAtom);
   const areObjectsInitialized = useAtomValue(areTrackletObjectsInitializedAtom);
   const setSession = useSetAtom(sessionAtom);
+  const setIsLITLoRAModeEnabled = useSetAtom(litLoRAModeEnabledAtom);
   const {enqueueMessage} = useMessagesSnackbar();
   const {isThrottled, maxThrottles, throttle} = useFunctionThrottle(250, 4);
 
@@ -71,10 +73,19 @@ export default function TrackAndPlayButton() {
     // a user can still quickly abort a stream if they notice the
     // inferred mask is misaligned.
     throttle(
-      () => {
+      async () => {
         if (!isStreaming) {
           enqueueMessage('trackAndPlayClick');
           behaviorTracker.logTrackingEvent('track_objects');
+          // Enable LoRA mode when tracking objects
+          // Do this BEFORE streamMasks to avoid the button being disabled
+          try {
+            await video?.enableLITLoRAMode();
+            // Update the atom state so the UI reflects that LoRA is enabled
+            setIsLITLoRAModeEnabled(true);
+          } catch (error) {
+            console.error('Failed to enable LoRA mode:', error);
+          }
           video?.streamMasks();
           setSession(previousSession =>
             previousSession == null
@@ -94,6 +105,7 @@ export default function TrackAndPlayButton() {
     maxThrottles,
     video,
     setSession,
+    setIsLITLoRAModeEnabled,
     enqueueMessage,
     throttle,
   ]);
