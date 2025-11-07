@@ -722,10 +722,6 @@ class InferenceAPI:
                     f"Adding LoRA training sample for session {session_id}, obj {obj_id}, frame {original_frame_idx}"
                 )
                 
-                # Enable LoRA mode if not already enabled
-                if not self.lit_lora_mode:
-                    self.enable_lora_mode()
-                
                 # Initialize storage if needed
                 if session_id not in self.lora_training_data:
                     self.lora_training_data[session_id] = {}
@@ -755,23 +751,23 @@ class InferenceAPI:
                 
                 # First, propagate to this frame to ensure features are captured
                 # This is critical: propagate_to_frame runs _track_step which populates temp_feat_for_lora
-                try:
-                    _, _, _ = self.predictor.propagate_to_frame(
-                        inference_state=inference_state,
-                        frame_idx=frame_idx,
-                    )
-                except Exception as e:
-                    logger.warning(f"Could not propagate to frame {frame_idx}: {e}")
+                # try:
+                #     _, _, _ = self.predictor.propagate_to_frame(
+                #         inference_state=inference_state,
+                #         frame_idx=frame_idx,
+                #     )
+                # except Exception as e:
+                #     logger.warning(f"Could not propagate to frame {frame_idx}: {e}")
                 
                 # Add the mask - features should already be captured from propagation
-                input_mask = ((mask > 0) & (mask != 255)).astype(np.uint8)
-                _, _, _ = self.predictor.add_new_mask(
-                    inference_state=inference_state,
-                    frame_idx=frame_idx,
-                    obj_id=obj_id,
-                    mask=input_mask,
-                    run_mem_encoder=False
-                )
+                # input_mask = ((mask > 0) & (mask != 255)).astype(np.uint8)
+                # _, _, _ = self.predictor.add_new_mask(
+                #     inference_state=inference_state,
+                #     frame_idx=frame_idx,
+                #     obj_id=obj_id,
+                #     mask=input_mask,
+                #     run_mem_encoder=False
+                # )
                 
                 # Train LoRA IMMEDIATELY after adding mask (following online_eval.py workflow)
                 # This ensures temp_feat_for_lora has the correct features
