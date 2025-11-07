@@ -25,8 +25,12 @@ import {
   activeTrackletObjectIdAtom,
   sessionAtom,
   trackletObjectsAtom,
+  litLoRAModeEnabledAtom,
+  streamingStateAtom,
 } from '@/demo/atoms';
 import PrimaryCTAButton from '@/common/components/button/PrimaryCTAButton';
+import {ChartLineSmooth} from '@carbon/icons-react';
+import {behaviorTracker} from '@/common/utils/BehaviorTracker';
 
 type Props = {
   video?: VideoData;
@@ -41,6 +45,11 @@ export default function FirstClickView({video}: Props) {
   const setActiveTrackletId = useSetAtom(activeTrackletObjectIdAtom);
   const tracklets = useAtomValue(trackletObjectsAtom);
   const [isLoadingMask, setIsLoadingMask] = useState(false);
+  const [isLITLoRAModeEnabled, setIsLITLoRAModeEnabled] = useAtom(
+    litLoRAModeEnabledAtom,
+  );
+  const streamingState = useAtomValue(streamingStateAtom);
+  const [isEnablingLoRA, setIsEnablingLoRA] = useState(false);
 
   useEffect(() => {
     if (!isFirstClickMessageShown.current) {
@@ -48,6 +57,33 @@ export default function FirstClickView({video}: Props) {
       enqueueMessage('firstClick');
     }
   }, [enqueueMessage]);
+
+  const handleEnableLoRA = async () => {
+    if (isLITLoRAModeEnabled || !videoWorker) {
+      return;
+    }
+
+    const isDisabled =
+      streamingState === 'requesting' ||
+      streamingState === 'partial' ||
+      streamingState === 'aborting';
+
+    if (isDisabled) {
+      return;
+    }
+
+    setIsEnablingLoRA(true);
+    try {
+      await videoWorker.enableLITLoRAMode();
+      enqueueMessage('frameTrackingEnabled');
+      setIsLITLoRAModeEnabled(true);
+      behaviorTracker.logTrackingEvent('enable_frame_tracking');
+    } catch (error) {
+      console.error('Failed to enable LoRA mode:', error);
+    } finally {
+      setIsEnablingLoRA(false);
+    }
+  };
 
   const handleLoadMask = async () => {
     if (!video || !videoWorker || !session) {
@@ -130,6 +166,19 @@ export default function FirstClickView({video}: Props) {
         <p className="!text-gray-60">
           To start, click any object in the video.
         </p>
+        {!isLITLoRAModeEnabled && session && (
+          <div className="flex flex-col gap-4">
+            <p className="!text-gray-60">
+              Enable LIT_LoRA mode to get started:
+            </p>
+            <PrimaryCTAButton
+              disabled={isEnablingLoRA}
+              onClick={handleEnableLoRA}
+              endIcon={<ChartLineSmooth size={20} />}>
+              {isEnablingLoRA ? 'Enabling LoRA...' : 'Enable LIT_LoRA Mode'}
+            </PrimaryCTAButton>
+          </div>
+        )}
         {maskUrl && session && (
           <div className="flex flex-col gap-4">
             <p className="!text-gray-60">

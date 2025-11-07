@@ -797,7 +797,7 @@ class InferenceAPI:
                     training_success = self.predictor.train_lora(
                         mask_decoder_lora, 
                         mask,  # Use the GT mask
-                        training_epoch=100,
+                        training_epoch=40,
                         mode='init',
                         model_idx=0
                     )

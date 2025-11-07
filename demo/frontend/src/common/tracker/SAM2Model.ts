@@ -1177,7 +1177,6 @@ export class SAM2Model extends Tracker {
     for (const {objectId, rleMask} of rleMaskList) {
       console.log(`[SAM2Model] Debug: Processing mask for objectId ${objectId}`);
       const track = this._session.tracklets[objectId];
-      console.log(`[SAM2Model] Debug: Found tracklet for objectId ${objectId}:`, track);
       const {size, counts} = rleMask;
       const rleObject: RLEObject = {
         size: [size[0], size[1]],
@@ -1200,8 +1199,6 @@ export class SAM2Model extends Tracker {
         isEmpty,
       } as const;
       track.masks[frameIndex] = mask;
-      console.log(`[SAM2Model] Debug: Stored mask at frame ${frameIndex} for tracklet ${objectId}`);
-
       if (updateThumbnails && !isEmpty) {
         const {ctx} = await this._compressMaskForCanvas(decodedMask);
         const frame = this._context.currentFrame as VideoFrame;
@@ -1209,7 +1206,6 @@ export class SAM2Model extends Tracker {
       }
     }
 
-    console.log(`[SAM2Model] Debug: Calling updateTracklets with frameIndex=${frameIndex}, shouldGoToFrame=${shouldGoToFrame}`);
     this._context.updateTracklets(
       frameIndex,
       Object.values(this._session.tracklets),
@@ -1217,7 +1213,6 @@ export class SAM2Model extends Tracker {
     );
 
     // Notify the main thread
-    console.log(`[SAM2Model] Debug: Calling _updateTracklets to notify main thread`);
     this._updateTracklets();
   }
 
