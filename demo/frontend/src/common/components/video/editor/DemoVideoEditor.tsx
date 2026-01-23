@@ -184,6 +184,12 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
 
     video?.addEventListener('loraCandidatesGenerated', onLoraCandidatesGenerated);
 
+    function onTrainingProgress() {
+      enqueueMessage('correctionSaved');
+    }
+
+    video?.addEventListener('trainingProgress', onTrainingProgress);
+
     function onRenderingError(event: RenderingErrorEvent) {
       setRenderingError(event.error);
     }
@@ -203,6 +209,7 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
       video?.removeEventListener('sessionStartFailed', onSessionStartFailed);
       video?.removeEventListener('trackletsUpdated', onTrackletsUpdated);
       video?.removeEventListener('loraCandidatesGenerated', onLoraCandidatesGenerated);
+      video?.removeEventListener('trainingProgress', onTrainingProgress);
       video?.removeEventListener('renderingError', onRenderingError);
     };
   }, [

@@ -199,6 +199,11 @@ export type StreamingStateUpdateResponse = Request<
   StreamingStateUpdateEvent
 >;
 
+export type TrainingProgressResponse = Request<
+  'trainingProgress',
+  {message: string}
+>;
+
 export type TrackerResponse =
   | SessionStartedResponse
   | SessionStartFailedResponse
@@ -209,6 +214,7 @@ export type TrackerResponse =
   | ClearPointsInVideoResponse
   | StreamingStartedResponse
   | StreamingCompletedResponse
-  | StreamingStateUpdateResponse;
+  | StreamingStateUpdateResponse
+  | TrainingProgressResponse;
 
 export type TrackerResponseMessageEvent = MessageEvent<TrackerResponse>;

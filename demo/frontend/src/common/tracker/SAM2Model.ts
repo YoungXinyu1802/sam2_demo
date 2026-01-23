@@ -44,6 +44,7 @@ import {
   TrackletCreatedResponse,
   TrackletDeletedResponse,
   TrackletsUpdatedResponse,
+  TrainingProgressResponse,
 } from '@/common/tracker/TrackerTypes';
 import {convertMaskToRGBA} from '@/common/utils/MaskUtils';
 import multipartStream from '@/common/utils/MultipartStream';
@@ -712,6 +713,12 @@ export class SAM2Model extends Tracker {
     console.log(`[SAM2Model] Starting frame propagation for frame ${frameIndex} (session: ${sessionId})`);
     
     try {
+      // If LoRA mode is enabled, train LoRA first before propagating
+      if (this._litLoRAModeEnabled) {
+        console.log(`[SAM2Model] LoRA mode enabled, training LoRA before propagation`);
+        await this._trainLoraBeforePropagation();
+      }
+      
       const url = `${this._endpoint}/propagate_to_frame`;
       
       // Use stored tracking FPS
@@ -1120,6 +1127,37 @@ export class SAM2Model extends Tracker {
   }
 
   // PRIVATE
+  private async _trainLoraBeforePropagation(): Promise<void> {
+    // Get the current video frame index (not the reindexed frame)
+    const currentVideoFrame = this._context.frameIndex;
+    const trackletIds = Object.keys(this._session.tracklets).map(Number);
+    
+    // Show training progress message
+    this._sendResponse<TrainingProgressResponse>('trainingProgress', {
+      message: 'Training LoRA model...',
+    });
+    
+    for (const objectId of trackletIds) {
+      const tracklet = this._session.tracklets[objectId];
+      if (tracklet && tracklet.isInitialized) {
+        // Get the latest mask for this object at the current video frame
+        const mask = tracklet.masks[currentVideoFrame];
+        if (mask && mask.data) {
+          const rleData = mask.data;
+          // Type guard: check if it's an RLEObject (has size and counts properties)
+          if ('size' in rleData && 'counts' in rleData) {
+            const rleObject: RLEObject = {
+              size: rleData.size as [number, number],
+              counts: rleData.counts,
+            };
+            await this._sendLoRATrainingData(currentVideoFrame, objectId, rleObject);
+            Logger.info(`Trained LoRA for object ${objectId} at frame ${currentVideoFrame} before propagation`);
+          }
+        }
+      }
+    }
+  }
+
   private async _sendLoRATrainingData(
     frameIndex: number,
     objectId: number,

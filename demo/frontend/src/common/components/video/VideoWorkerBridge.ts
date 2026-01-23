@@ -162,6 +162,10 @@ export interface LoraCandidatesGeneratedEvent {
   data: any;
 }
 
+export interface TrainingProgressEvent {
+  message: string;
+}
+
 export interface VideoWorkerEventMap {
   error: ErrorEvent;
   decode: DecodeEvent;
@@ -182,6 +186,7 @@ export interface VideoWorkerEventMap {
   streamingCompleted: StreamingCompletedEvent;
   streamingStateUpdate: StreamingStateUpdateEvent;
   loraCandidatesGenerated: LoraCandidatesGeneratedEvent;
+  trainingProgress: TrainingProgressEvent;
   // HTMLVideoElement events https://developer.mozilla.org/en-US/docs/Web/HTML/Element/video#events
   loadstart: LoadStartEvent;
   effectUpdate: EffectUpdateEvent;

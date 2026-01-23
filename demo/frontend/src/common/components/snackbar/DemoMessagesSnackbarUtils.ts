@@ -87,9 +87,9 @@ export const defaultMessageMap: MessagesEventMap = {
     options: {expire: true, repeat: false, duration: 3000},
   },
   correctionSaved: {
-    text: 'Correction saved for LoRA training!',
+    text: 'Training LoRA model...',
     shown: false,
-    options: {expire: true, repeat: true, duration: 3000, type: 'info'},
+    options: {expire: true, repeat: true, duration: 3000, type: 'loading'},
   },
   effectsMessage: {
     text: "Tip: If you aren't sure where to get started, click \"Surprise Me\" to apply a surprise effect to your video.",
