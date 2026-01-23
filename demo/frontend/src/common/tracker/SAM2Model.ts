@@ -768,6 +768,27 @@ export class SAM2Model extends Tracker {
       
       // Pass false for shouldGoToFrame to avoid disrupting the playback loop
       await this._updateTrackletMasks(result, false, false);
+      
+      // Check if LoRA candidates were auto-generated during propagation
+      if (jsonResponse.lora_candidates && jsonResponse.lora_candidates.length > 0) {
+        Logger.info(`[SAM2Model] Auto-displaying ${jsonResponse.lora_candidates.length} LoRA candidates from propagation`);
+        
+        // Get the first object ID (assuming single object for now)
+        const objectId = rleMaskList.length > 0 ? rleMaskList[0].objectId : 0;
+        
+        const candidates = jsonResponse.lora_candidates.map((candidate: any, index: number) => ({
+          index,
+          mask: candidate.mask,
+          confidence: candidate.confidence,
+        }));
+        
+        // Send candidates to UI for display
+        this._context.sendLoraCandidates({
+          objectId,
+          frameIndex: this._context.frameIndex,
+          candidates,
+        });
+      }
     } catch (error) {
       Logger.error(`Error tracking frame ${frameIndex}:`, error);
       // Don't throw, just log the error to avoid breaking video playback
@@ -911,6 +932,7 @@ export class SAM2Model extends Tracker {
     // Send the current frame's masks for all tracklets as training data
     const frameIndex = this._context.frameIndex;
     const trackletIds = Object.keys(this._session.tracklets).map(Number);
+    const trainingRequests: Promise<void>[] = [];
 
     for (const objectId of trackletIds) {
       const tracklet = this._session.tracklets[objectId];
@@ -926,11 +948,19 @@ export class SAM2Model extends Tracker {
               size: rleData.size as [number, number],
               counts: rleData.counts,
             };
-            this._sendLoRATrainingData(frameIndex, objectId, rleObject);
+            trainingRequests.push(
+              this._sendLoRATrainingData(frameIndex, objectId, rleObject),
+            );
             Logger.info(`Sent training data for object ${objectId} at frame ${frameIndex}`);
           }
         }
       }
+    }
+
+    if (trainingRequests.length > 0) {
+      void Promise.all(trainingRequests).then(() => {
+        void this.generateLoraCandidates();
+      });
     }
   }
 
@@ -943,7 +973,7 @@ export class SAM2Model extends Tracker {
   }
 
   public logPauseEvent(): void {
-    // No-op: LoRA candidate generation is now manual via button
+    // No-op
   }
 
   public async generateLoraCandidates(): Promise<void> {
@@ -1090,7 +1120,6 @@ export class SAM2Model extends Tracker {
   }
 
   // PRIVATE
-
   private async _sendLoRATrainingData(
     frameIndex: number,
     objectId: number,

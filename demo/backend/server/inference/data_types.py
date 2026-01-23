@@ -204,9 +204,17 @@ class PropagateDataValue:
 
 @dataclass_json
 @dataclass
+class LoRACandidateValue:
+    mask: Mask
+    confidence: float
+
+
+@dataclass_json
+@dataclass
 class PropagateDataResponse:
     frame_index: int
     results: List[PropagateDataValue]
+    lora_candidates: Optional[List[LoRACandidateValue]] = None
 
 
 @dataclass_json
@@ -219,13 +227,6 @@ class RemoveObjectResponse:
 @dataclass
 class CancelPorpagateResponse:
     success: bool
-
-
-@dataclass_json
-@dataclass
-class LoRACandidateValue:
-    mask: Mask
-    confidence: float
 
 
 @dataclass_json

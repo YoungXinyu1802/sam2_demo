@@ -699,9 +699,44 @@ class InferenceAPI:
                 logger.info(f"[InferenceAPI] Debug: rle_mask_list = {rle_mask_list}")
                 logger.info(f"[InferenceAPI] Debug: response object_ids = {[item.object_id for item in rle_mask_list]}")
                 
+                # Auto-generate LoRA candidates if LoRA has been trained
+                lora_candidates = None
+                if hasattr(self.predictor, 'trained_lora') and self.predictor.trained_lora:
+                    logger.info(f"[InferenceAPI] Auto-generating LoRA candidates for frame {frame_idx}")
+                    try:
+                        # Generate candidates from ALL LoRA models
+                        lora_candidate_list = self.predictor.lora_predict_all_candidates(
+                            inference_state=inference_state,
+                            frame_idx=frame_idx
+                        )
+                        
+                        if lora_candidate_list:
+                            lora_candidates = []
+                            for idx, candidate in enumerate(lora_candidate_list):
+                                predicted_mask_score = candidate['predicted_mask_score']
+                                
+                                # Convert to binary mask and encode as RLE
+                                lora_mask = (predicted_mask_score[0] > 0).squeeze().cpu().numpy().astype(np.uint8)
+                                mask_rle = encode_masks(np.array(lora_mask, dtype=np.uint8, order="F"))
+                                mask_rle["counts"] = mask_rle["counts"].decode()
+                                
+                                lora_candidates.append(
+                                    LoRACandidateValue(
+                                        mask=Mask(
+                                            size=mask_rle["size"],
+                                            counts=mask_rle["counts"],
+                                        ),
+                                        confidence=float(idx),
+                                    )
+                                )
+                            logger.info(f"[InferenceAPI] Generated {len(lora_candidates)} LoRA candidates")
+                    except Exception as e:
+                        logger.error(f"[InferenceAPI] Error auto-generating LoRA candidates: {e}")
+                
                 return PropagateDataResponse(
                     frame_index=frame_idx,  # Return the frame index that was processed
                     results=rle_mask_list,
+                    lora_candidates=lora_candidates,
                 )
             except Exception as e:
                 logger.error(f"Error propagating to frame {frame_idx}: {e}")

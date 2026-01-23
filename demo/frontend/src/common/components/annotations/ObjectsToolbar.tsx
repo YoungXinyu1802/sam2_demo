@@ -17,7 +17,6 @@ import AddObjectButton from '@/common/components/annotations/AddObjectButton';
 import FirstClickView from '@/common/components/annotations/FirstClickView';
 import LimitNotice from '@/common/components/annotations/LimitNotice';
 import LoRACandidateSelector from '@/common/components/annotations/LoRACandidateSelector';
-import GenerateLoRACandidatesButton from '@/common/components/annotations/GenerateLoRACandidatesButton';
 import ObjectsToolbarBottomActions from '@/common/components/annotations/ObjectsToolbarBottomActions';
 import ObjectsToolbarHeader from '@/common/components/annotations/ObjectsToolbarHeader';
 import {getObjectLabel} from '@/common/components/annotations/ObjectUtils';
@@ -68,10 +67,9 @@ export default function ObjectsToolbar({onTabChange}: Props) {
           );
         })}
         {isAddObjectEnabled && <AddObjectButton />}
-                {isObjectLimitReached && <LimitNotice />}
-                <GenerateLoRACandidatesButton />
-                <LoRACandidateSelector />
-              </div>
+        {isObjectLimitReached && <LimitNotice />}
+        <LoRACandidateSelector />
+      </div>
       <ObjectsToolbarBottomActions onTabChange={onTabChange} />
     </div>
   );
