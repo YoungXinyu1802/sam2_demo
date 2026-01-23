@@ -32,6 +32,7 @@ import useResetDemoEditor from '@/common/components/video/editor/useResetEditor'
 import useVideo from '@/common/components/video/editor/useVideo';
 import InteractionLayer from '@/common/components/video/layers/InteractionLayer';
 import {PointsLayer} from '@/common/components/video/layers/PointsLayer';
+import LoRACandidatePrompt from '@/common/components/video/layers/LoRACandidatePrompt';
 import LoadingStateScreen from '@/common/loading/LoadingStateScreen';
 import UploadLoadingScreen from '@/common/loading/UploadLoadingScreen';
 import useScreenSize from '@/common/screen/useScreenSize';
@@ -292,6 +293,7 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
           />
         </>
       )}
+      <LoRACandidatePrompt key="lora-candidate-prompt" />
       {!isMobile && <MessagesSnackbar key="snackbar-layer" />}
     </>
   );
