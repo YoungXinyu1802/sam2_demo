@@ -1387,6 +1387,8 @@ class SAM2VideoPredictor(SAM2Base):
             }
             candidates.append(candidate)
         
+        # Store candidates for later use in apply_lora_candidate
+        self.lora_candidates = candidates
         return candidates
     
     def apply_lora_candidate(self, inference_state, frame_idx, candidate_idx):
@@ -1394,37 +1396,15 @@ class SAM2VideoPredictor(SAM2Base):
         Apply a selected LoRA candidate to memory.
         This is called after user chooses a candidate.
         """
-        if candidate_idx >= len(self.multi_lora):
+        if not hasattr(self, 'lora_candidates') or candidate_idx >= len(self.lora_candidates):
             raise ValueError(f"Invalid candidate index: {candidate_idx}")
         
-        # Re-generate the specific candidate's prediction
-        pix_feat_with_mem = self.temp_feat_for_lora["pix_feat_with_mem"]
-        positional_encodings = self.positional_encodings_for_lora
-        sparse_embeddings = self.sparse_embeddings_for_lora
-        dense_embeddings = self.dense_embeddings_for_lora
-        high_res_features = self.temp_feat_for_lora["high_res_features"]
-        
-        mask_decoder_lora = self.multi_lora[candidate_idx]
-        
-        H, W = inference_state["video_height"], inference_state["video_width"]
-        dummy_gt_mask = np.zeros((H, W), dtype=np.uint8)
-        
-        (
-            low_res_masks,
-            high_res_masks,
-            object_score_logits,
-            _,
-            predicted_mask_score
-        ) = predict(
-            model=mask_decoder_lora,
-            pix_feat_with_mem=pix_feat_with_mem,
-            image_pe=positional_encodings,
-            sparse_embeddings=sparse_embeddings,
-            dense_embeddings=dense_embeddings,
-            high_res_features=high_res_features,
-            image_size=self.image_size,
-            original_gt_mask=dummy_gt_mask
-        )
+        # Retrieve the pre-computed candidate instead of regenerating
+        candidate = self.lora_candidates[candidate_idx]
+        low_res_masks = candidate['low_res_masks']
+        high_res_masks = candidate['high_res_masks']
+        object_score_logits = candidate['object_score_logits']
+        predicted_mask_score = candidate['predicted_mask_score']
         
         # Encode to memory (same as correction)
         maskmem_features, maskmem_pos_enc = self._encode_new_memory(
