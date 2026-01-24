@@ -409,7 +409,7 @@ class SAM2VideoPredictor(SAM2Base):
         if run_mem_encoder:
             obj_output_dict[storage_key][frame_idx] = current_out
             # also add to cond frame outputs (this can make the user click more efficiently)
-            obj_output_dict["cond_frame_outputs"][frame_idx] = current_out
+            # obj_output_dict["cond_frame_outputs"][frame_idx] = current_out
 
 
         # Resize the output mask to the original video resolution
@@ -1433,6 +1433,7 @@ class SAM2VideoPredictor(SAM2Base):
         
         obj_output_dict = inference_state["output_dict_per_obj"][0]
         obj_output_dict["non_cond_frame_outputs"][frame_idx] = compact_current_out
+        obj_output_dict["cond_frame_outputs"][frame_idx] = compact_current_out
         
         # Return the applied mask for confirmation
         return predicted_mask_score

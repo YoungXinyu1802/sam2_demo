@@ -43,7 +43,7 @@ class BehaviorTracker {
   startSession(sessionId: string | null, videoName: string | null): void {
     this.sessionData = {
       sessionId,
-      startTime: Date.now(),
+      startTime: 0, // Will be set when frame tracking is enabled
       endTime: null,
       clicks: [],
       trackingEvents: [],
@@ -77,8 +77,16 @@ class BehaviorTracker {
       return;
     }
 
+    const timestamp = Date.now();
+
+    // Set start time when frame tracking is enabled for the first time
+    if (action === 'enable_frame_tracking' && this.sessionData.startTime === 0) {
+      this.sessionData.startTime = timestamp;
+      console.log('[BehaviorTracker] Session start time set:', new Date(timestamp).toISOString(), '(timestamp:', timestamp + ')');
+    }
+
     this.sessionData.trackingEvents.push({
-      timestamp: Date.now(),
+      timestamp,
       action,
     });
   }
@@ -89,6 +97,13 @@ class BehaviorTracker {
     }
 
     this.sessionData.endTime = Date.now();
+    
+    if (this.sessionData.startTime > 0) {
+      const duration = this.sessionData.endTime - this.sessionData.startTime;
+      console.log('[BehaviorTracker] Session ended. Duration:', Math.round(duration / 1000), 'seconds (', duration, 'ms)');
+    } else {
+      console.log('[BehaviorTracker] Session ended, but frame tracking was never enabled (no duration recorded)');
+    }
   }
 
   exportData(): string {
@@ -96,9 +111,13 @@ class BehaviorTracker {
       return JSON.stringify({error: 'No session data available'});
     }
 
-    const totalDuration = this.sessionData.endTime
-      ? this.sessionData.endTime - this.sessionData.startTime
-      : Date.now() - this.sessionData.startTime;
+    // Calculate duration only if startTime has been set (frame tracking was enabled)
+    let totalDuration = 0;
+    if (this.sessionData.startTime > 0) {
+      totalDuration = this.sessionData.endTime
+        ? this.sessionData.endTime - this.sessionData.startTime
+        : Date.now() - this.sessionData.startTime;
+    }
 
     const clicksPerFrame = this.sessionData.clicks.reduce((acc, click) => {
       if (!acc[click.frameIndex]) {

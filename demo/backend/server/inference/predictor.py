@@ -828,7 +828,7 @@ class InferenceAPI:
                     training_success = self.predictor.train_lora(
                         mask_decoder_lora, 
                         mask,  # Use the GT mask
-                        training_epoch=40,
+                        training_epoch=20,
                         mode='init',
                         model_idx=0
                     )
@@ -845,7 +845,7 @@ class InferenceAPI:
                     self.predictor.train_lora(
                         self.predictor.multi_lora[len(self.predictor.multi_lora) - 1],
                         mask,
-                        training_epoch=40,
+                        training_epoch=20,
                         mode='finetune',
                         model_idx=0
                     )
