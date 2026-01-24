@@ -95,6 +95,7 @@ export class SAM2Model extends Tracker {
   private _frameTrackingEnabled: boolean = false;
   private _litLoRAModeEnabled: boolean = false;
   private _trackingFps: number = 5; // Default tracking FPS
+  private _trainedFrames: Set<string> = new Set(); // Track which frames have been trained (format: "objectId:frameIndex")
 
   private _emptyMask: RLEObject | null = null;
 
@@ -378,7 +379,9 @@ export class SAM2Model extends Tracker {
         onCompleted: response => {
           tracklet.points[frameIndex] = points;
           tracklet.isInitialized = true;
-          this._updateTrackletMasks(response.addPoints, true);
+          // Pass shouldGoToFrame=false to prevent triggering train_lora on addPoints
+          // train_lora should only be triggered during frame propagation
+          this._updateTrackletMasks(response.addPoints, true, false);
           
           // If LIT_LoRA mode and frame tracking are enabled, send training data
           // Note: Training data is now sent manually via finishCorrection()
@@ -510,7 +513,8 @@ export class SAM2Model extends Tracker {
             }
           }
           
-          this._updateTrackletMasks(trackletUpdate, true);
+          // Pass shouldGoToFrame=false to prevent triggering train_lora on addMask
+          this._updateTrackletMasks(trackletUpdate, true, false);
           console.log('[SAM2Model.addMask] Tracklet masks updated successfully');
           resolve();
         })
@@ -569,7 +573,8 @@ export class SAM2Model extends Tracker {
         onCompleted: response => {
           tracklet.points[frameIndex] = [];
           tracklet.isInitialized = true;
-          this._updateTrackletMasks(response.clearPointsInFrame, true);
+          // Pass shouldGoToFrame=false to prevent triggering train_lora on clearPointsInFrame
+          this._updateTrackletMasks(response.clearPointsInFrame, true, false);
           resolve();
         },
         onError: error => {
@@ -1112,6 +1117,7 @@ export class SAM2Model extends Tracker {
       // Reset frontend states
       this._litLoRAModeEnabled = false;
       this._frameTrackingEnabled = false;
+      this._trainedFrames.clear(); // Clear trained frames tracking
       
       // Disable frame tracking in context
       this._context.enableFrameTracking(false);
@@ -1128,32 +1134,49 @@ export class SAM2Model extends Tracker {
 
   // PRIVATE
   private async _trainLoraBeforePropagation(): Promise<void> {
-    // Get the current video frame index (not the reindexed frame)
-    const currentVideoFrame = this._context.frameIndex;
     const trackletIds = Object.keys(this._session.tracklets).map(Number);
     
-    // Show training progress message
-    this._sendResponse<TrainingProgressResponse>('trainingProgress', {
-      message: 'Training LoRA model...',
-    });
+    // Collect frames that need training (have points but haven't been trained yet)
+    const framesToTrain: Array<{frameIndex: number; objectId: number; mask: RLEObject}> = [];
     
     for (const objectId of trackletIds) {
       const tracklet = this._session.tracklets[objectId];
       if (tracklet && tracklet.isInitialized) {
-        // Get the latest mask for this object at the current video frame
-        const mask = tracklet.masks[currentVideoFrame];
-        if (mask && mask.data) {
-          const rleData = mask.data;
-          // Type guard: check if it's an RLEObject (has size and counts properties)
-          if ('size' in rleData && 'counts' in rleData) {
-            const rleObject: RLEObject = {
-              size: rleData.size as [number, number],
-              counts: rleData.counts,
-            };
-            await this._sendLoRATrainingData(currentVideoFrame, objectId, rleObject);
-            Logger.info(`Trained LoRA for object ${objectId} at frame ${currentVideoFrame} before propagation`);
+        // Find all frames that have user input (points) for this object
+        for (let frameIndex = 0; frameIndex < tracklet.points.length; frameIndex++) {
+          const points = tracklet.points[frameIndex];
+          const mask = tracklet.masks[frameIndex];
+          const frameKey = `${objectId}:${frameIndex}`;
+          
+          // Only train on frames where:
+          // 1. User has added points (corrections)
+          // 2. Haven't been trained yet
+          if (points && points.length > 0 && mask && mask.data && !mask.isEmpty && !this._trainedFrames.has(frameKey)) {
+            const rleData = mask.data;
+            // Type guard: check if it's an RLEObject (has size and counts properties)
+            if ('size' in rleData && 'counts' in rleData) {
+              const rleObject: RLEObject = {
+                size: rleData.size as [number, number],
+                counts: rleData.counts,
+              };
+              framesToTrain.push({frameIndex, objectId, mask: rleObject});
+              // Mark as trained
+              this._trainedFrames.add(frameKey);
+            }
           }
         }
+      }
+    }
+    
+    // Only show training message and train if there are new frames
+    if (framesToTrain.length > 0) {
+      this._sendResponse<TrainingProgressResponse>('trainingProgress', {
+        message: 'Training LoRA model...',
+      });
+      
+      for (const {frameIndex, objectId, mask} of framesToTrain) {
+        await this._sendLoRATrainingData(frameIndex, objectId, mask);
+        Logger.info(`Trained LoRA for object ${objectId} at frame ${frameIndex} before propagation`);
       }
     }
   }
@@ -1202,6 +1225,8 @@ export class SAM2Model extends Tracker {
     this._session.id = null;
     // Clear existing tracklets
     this._session.tracklets = [];
+    // Clear trained frames tracking
+    this._trainedFrames.clear();
   }
 
   private _clearTracklets() {
