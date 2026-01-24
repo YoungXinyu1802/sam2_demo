@@ -624,6 +624,9 @@ export class SAM2Model extends Tracker {
           // Reset points and masks for each tracklet
           this._clearTracklets();
 
+          // Recreate default tracklet (like in startSession)
+          this.createTracklet();
+
           // Notify the main thread
           this._context.goToFrame(this._context.frameIndex);
           this._updateTracklets();

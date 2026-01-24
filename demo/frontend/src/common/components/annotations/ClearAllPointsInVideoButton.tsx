@@ -16,7 +16,16 @@
 import useRestartSession from '@/common/components/session/useRestartSession';
 import useMessagesSnackbar from '@/common/components/snackbar/useDemoMessagesSnackbar';
 import useVideo from '@/common/components/video/editor/useVideo';
-import {isPlayingAtom, isStreamingAtom, labelTypeAtom} from '@/demo/atoms';
+import {
+  isPlayingAtom,
+  isStreamingAtom,
+  labelTypeAtom,
+  litLoRAModeEnabledAtom,
+  frameTrackingEnabledAtom,
+  loraMaskCandidatesAtom,
+  loraTrainingDataAtom,
+  sessionAtom,
+} from '@/demo/atoms';
 import {Reset} from '@carbon/icons-react';
 import stylex from '@stylexjs/stylex';
 import {useAtomValue, useSetAtom} from 'jotai';
@@ -39,6 +48,11 @@ export default function ClearAllPointsInVideoButton({onRestart}: Props) {
   const isPlaying = useAtomValue(isPlayingAtom);
   const isStreaming = useAtomValue(isStreamingAtom);
   const setLabelType = useSetAtom(labelTypeAtom);
+  const setLitLoRAModeEnabled = useSetAtom(litLoRAModeEnabledAtom);
+  const setFrameTrackingEnabled = useSetAtom(frameTrackingEnabledAtom);
+  const setLoraCandidates = useSetAtom(loraMaskCandidatesAtom);
+  const setLoraTrainingData = useSetAtom(loraTrainingDataAtom);
+  const setSession = useSetAtom(sessionAtom);
   const {clearMessage} = useMessagesSnackbar();
   const {restartSession} = useRestartSession();
 
@@ -68,8 +82,23 @@ export default function ClearAllPointsInVideoButton({onRestart}: Props) {
     if (!isSuccessful) {
       await restartSession();
     }
+    
+    // Reset UI state atoms to default values
     video.frame = 0;
     setLabelType('positive');
+    setLitLoRAModeEnabled(false);
+    setFrameTrackingEnabled(false);
+    setLoraCandidates(null);
+    setLoraTrainingData([]);
+    
+    // Reset session ranPropagation flag
+    setSession(prev => {
+      if (prev === null) {
+        return prev;
+      }
+      return {...prev, ranPropagation: false};
+    });
+    
     onRestart();
     clearMessage();
     setIsLoading(false);
