@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import SessionTimer from '@/common/components/session/SessionTimer';
 import Toolbar from '@/common/components/toolbar/Toolbar';
 import DemoVideoEditor from '@/common/components/video/editor/DemoVideoEditor';
 import useInputVideo from '@/common/components/video/useInputVideo';
@@ -57,6 +58,7 @@ export default function DemoPage() {
 
   return (
     <DemoPageLayout>
+      <SessionTimer />
       <StatsView />
       <Toolbar />
       <DemoVideoEditor video={video} />
