@@ -70,6 +70,14 @@ export const frameTrackingEnabledAtom = atom<boolean>(false);
 
 export const trackingFpsAtom = atom<number>(5); // Default 5 FPS for frame tracking
 
+// Track unique frames that have corrections
+export const correctedFramesAtom = atom<Set<number>>(new Set<number>());
+
+// Derived atom to get the count of corrected frames
+export const correctionsCountAtom = atom<number>(get => {
+  return get(correctedFramesAtom).size;
+});
+
 export const litLoRAModeEnabledAtom = atom<boolean>(false);
 
 export const loraTrainingDataAtom = atom<Array<{

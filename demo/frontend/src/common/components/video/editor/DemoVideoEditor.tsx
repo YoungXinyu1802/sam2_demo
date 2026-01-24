@@ -41,6 +41,7 @@ import useScreenSize from '@/common/screen/useScreenSize';
 import {SegmentationPoint} from '@/common/tracker/Tracker';
 import {
   activeTrackletObjectIdAtom,
+  correctedFramesAtom,
   frameIndexAtom,
   frameTrackingEnabledAtom,
   isAddObjectEnabledAtom,
@@ -113,6 +114,7 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
   const setTrackletObjects = useSetAtom(trackletObjectsAtom);
   const setFrameIndex = useSetAtom(frameIndexAtom);
   const setLoraCandidates = useSetAtom(loraMaskCandidatesAtom);
+  const setCorrectedFrames = useSetAtom(correctedFramesAtom);
   const frameIndex = useAtomValue(frameIndexAtom);
   const points = useAtomValue(pointsAtom);
   const isAddObjectEnabled = useAtomValue(isAddObjectEnabledAtom);
@@ -270,6 +272,15 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
         frameTrackingEnabled,
       );
     });
+    
+    // Add frame to corrected frames set if frame tracking is enabled
+    if (frameTrackingEnabled && newPoints.length > 0) {
+      setCorrectedFrames((prev: Set<number>) => {
+        const newSet = new Set(prev);
+        newSet.add(frameIndex);
+        return newSet;
+      });
+    }
   }
 
   async function handleAddPoint(point: SegmentationPoint) {

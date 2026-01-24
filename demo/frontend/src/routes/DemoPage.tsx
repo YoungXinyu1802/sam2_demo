@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import CorrectionsCounter from '@/common/components/session/CorrectionsCounter';
 import SessionTimer from '@/common/components/session/SessionTimer';
 import Toolbar from '@/common/components/toolbar/Toolbar';
 import DemoVideoEditor from '@/common/components/video/editor/DemoVideoEditor';
@@ -59,6 +60,7 @@ export default function DemoPage() {
   return (
     <DemoPageLayout>
       <SessionTimer />
+      <CorrectionsCounter />
       <StatsView />
       <Toolbar />
       <DemoVideoEditor video={video} />

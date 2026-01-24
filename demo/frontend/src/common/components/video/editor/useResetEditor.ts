@@ -18,6 +18,7 @@ import useToolbarTabs from '@/common/components/toolbar/useToolbarTabs';
 import useVideo from '@/common/components/video/editor/useVideo';
 import {
   activeTrackletObjectIdAtom,
+  correctedFramesAtom,
   frameIndexAtom,
   isPlayingAtom,
   isStreamingAtom,
@@ -45,6 +46,7 @@ export default function useResetEditor(): State {
   const setStreamingState = useSetAtom(streamingStateAtom);
   const setIsPlaying = useSetAtom(isPlayingAtom);
   const setIsStreaming = useSetAtom(isStreamingAtom);
+  const setCorrectedFrames = useSetAtom(correctedFramesAtom);
   const [, setDemoTabIndex] = useToolbarTabs();
 
   const resetEffects = useCallback(() => {
@@ -60,6 +62,7 @@ export default function useResetEditor(): State {
     setStreamingState('none');
     setIsPlaying(false);
     setIsStreaming(false);
+    setCorrectedFrames(new Set<number>());
     resetEffects();
     setDemoTabIndex(OBJECT_TOOLBAR_INDEX);
   }, [
@@ -70,6 +73,7 @@ export default function useResetEditor(): State {
     setStreamingState,
     setIsPlaying,
     setIsStreaming,
+    setCorrectedFrames,
     resetEffects,
     setDemoTabIndex,
   ]);
