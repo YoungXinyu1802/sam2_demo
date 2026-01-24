@@ -156,6 +156,8 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
 
   useEffect(() => {
     function onFrameUpdate(event: FrameUpdateEvent) {
+      // Log frame transition for correction time tracking
+      behaviorTracker.logFrameTransition(event.index);
       setFrameIndex(event.index);
     }
 

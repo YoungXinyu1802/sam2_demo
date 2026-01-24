@@ -21,11 +21,20 @@ export type ClickEvent = {
   point: [number, number];
   label: number; // 1 for positive, 0 for negative
   isCorrection: boolean; // true if added during frame tracking
+  correctionTimeMs?: number; // time spent correcting this frame (populated after frame transition)
 };
 
 export type TrackingEvent = {
   timestamp: number;
   action: 'track_objects' | 'enable_frame_tracking' | 'disable_frame_tracking' | 'play' | 'pause';
+};
+
+export type FrameCorrectionTime = {
+  frameIndex: number;
+  firstClickTimestamp: number;
+  frameExitTimestamp: number;
+  correctionTimeMs: number;
+  clickCount: number;
 };
 
 export type SessionData = {
@@ -35,10 +44,14 @@ export type SessionData = {
   clicks: ClickEvent[];
   trackingEvents: TrackingEvent[];
   videoName: string | null;
+  frameCorrectionTimes: FrameCorrectionTime[];
 };
 
 class BehaviorTracker {
   private sessionData: SessionData | null = null;
+  private currentFrameFirstClickTimestamp: number | null = null;
+  private currentFrameIndex: number | null = null;
+  private currentFrameClickCount: number = 0;
 
   startSession(sessionId: string | null, videoName: string | null): void {
     this.sessionData = {
@@ -48,7 +61,11 @@ class BehaviorTracker {
       clicks: [],
       trackingEvents: [],
       videoName,
+      frameCorrectionTimes: [],
     };
+    this.currentFrameFirstClickTimestamp = null;
+    this.currentFrameIndex = null;
+    this.currentFrameClickCount = 0;
   }
 
   logClick(
@@ -62,14 +79,31 @@ class BehaviorTracker {
       return;
     }
 
+    const timestamp = Date.now();
+
     this.sessionData.clicks.push({
-      timestamp: Date.now(),
+      timestamp,
       frameIndex,
       objectId,
       point,
       label,
       isCorrection,
     });
+
+    // Track correction time for this frame
+    if (isCorrection) {
+      if (this.currentFrameIndex !== frameIndex) {
+        // New frame - reset tracking
+        this.currentFrameIndex = frameIndex;
+        this.currentFrameFirstClickTimestamp = timestamp;
+        this.currentFrameClickCount = 1;
+        console.log(`[BehaviorTracker] Started tracking correction time for frame ${frameIndex} at ${new Date(timestamp).toISOString()}`);
+      } else {
+        // Same frame - increment click count
+        this.currentFrameClickCount++;
+        console.log(`[BehaviorTracker] Additional click on frame ${frameIndex} (total: ${this.currentFrameClickCount})`);
+      }
+    }
   }
 
   logTrackingEvent(action: TrackingEvent['action']): void {
@@ -89,6 +123,50 @@ class BehaviorTracker {
       timestamp,
       action,
     });
+  }
+
+  logFrameTransition(newFrameIndex: number): void {
+    if (!this.sessionData) {
+      return;
+    }
+
+    const timestamp = Date.now();
+
+    // If we have a pending correction time to record
+    if (
+      this.currentFrameFirstClickTimestamp !== null &&
+      this.currentFrameIndex !== null &&
+      this.currentFrameIndex !== newFrameIndex
+    ) {
+      const correctionTimeMs = timestamp - this.currentFrameFirstClickTimestamp;
+      
+      const frameCorrectionTime: FrameCorrectionTime = {
+        frameIndex: this.currentFrameIndex,
+        firstClickTimestamp: this.currentFrameFirstClickTimestamp,
+        frameExitTimestamp: timestamp,
+        correctionTimeMs,
+        clickCount: this.currentFrameClickCount,
+      };
+
+      this.sessionData.frameCorrectionTimes.push(frameCorrectionTime);
+
+      // Update all correction clicks for this frame with the correction time
+      this.sessionData.clicks.forEach(click => {
+        if (click.isCorrection && click.frameIndex === this.currentFrameIndex) {
+          click.correctionTimeMs = correctionTimeMs;
+        }
+      });
+
+      console.log(
+        `[BehaviorTracker] Frame ${this.currentFrameIndex} correction completed:`,
+        `${correctionTimeMs}ms with ${this.currentFrameClickCount} click(s)`
+      );
+
+      // Reset for next frame
+      this.currentFrameFirstClickTimestamp = null;
+      this.currentFrameIndex = null;
+      this.currentFrameClickCount = 0;
+    }
   }
 
   endSession(): void {
@@ -128,15 +206,32 @@ class BehaviorTracker {
     }, {} as Record<number, ClickEvent[]>);
 
     const corrections = this.sessionData.clicks.filter(click => click.isCorrection);
+    const correctedFrames = this.sessionData.frameCorrectionTimes;
+    
+    // Calculate total correction time
+    const totalCorrectionTimeMs = correctedFrames.reduce(
+      (sum, frame) => sum + frame.correctionTimeMs,
+      0
+    );
+
+    // Calculate average correction time per frame
+    const avgCorrectionTimeMs = correctedFrames.length > 0
+      ? totalCorrectionTimeMs / correctedFrames.length
+      : 0;
 
     const summary = {
       sessionId: this.sessionData.sessionId,
       videoName: this.sessionData.videoName,
-      totalDurationMs: totalDuration,
-      totalDurationSeconds: Math.round(totalDuration / 1000),
+      totalAnnotationTimeMs: totalDuration,
+      totalAnnotationTimeSeconds: Math.round(totalDuration / 1000),
       totalClicks: this.sessionData.clicks.length,
       totalCorrections: corrections.length,
       framesWithClicks: Object.keys(clicksPerFrame).length,
+      correctedFramesCount: correctedFrames.length,
+      totalCorrectionTimeMs: Math.round(totalCorrectionTimeMs),
+      totalCorrectionTimeSeconds: Math.round(totalCorrectionTimeMs / 1000),
+      avgCorrectionTimeMs: Math.round(avgCorrectionTimeMs),
+      avgCorrectionTimeSeconds: (avgCorrectionTimeMs / 1000).toFixed(2),
       trackingEventsCount: this.sessionData.trackingEvents.length,
     };
 
@@ -145,7 +240,29 @@ class BehaviorTracker {
       sessionData: this.sessionData,
       clicksPerFrame,
       corrections,
+      frameCorrectionTimes: correctedFrames,
     };
+
+    // Log summary to console
+    console.log('\n=== Annotation Session Summary ===');
+    console.log(`Session ID: ${summary.sessionId}`);
+    console.log(`Video: ${summary.videoName}`);
+    console.log(`\nTotal Annotation Time: ${summary.totalAnnotationTimeSeconds}s (${summary.totalAnnotationTimeMs}ms)`);
+    console.log(`Total Correction Time: ${summary.totalCorrectionTimeSeconds}s (${summary.totalCorrectionTimeMs}ms)`);
+    console.log(`Average Correction Time per Frame: ${summary.avgCorrectionTimeSeconds}s (${summary.avgCorrectionTimeMs}ms)`);
+    console.log(`\nCorrected Frames: ${summary.correctedFramesCount}`);
+    console.log(`Total Corrections/Clicks: ${summary.totalCorrections}`);
+    console.log(`Frames with Clicks: ${summary.framesWithClicks}`);
+    
+    if (correctedFrames.length > 0) {
+      console.log('\n=== Correction Times per Frame ===');
+      correctedFrames.forEach(frame => {
+        console.log(
+          `Frame ${frame.frameIndex}: ${(frame.correctionTimeMs / 1000).toFixed(2)}s with ${frame.clickCount} click(s)`
+        );
+      });
+    }
+    console.log('==================================\n');
 
     return JSON.stringify(exportData, null, 2);
   }
@@ -165,6 +282,9 @@ class BehaviorTracker {
 
   reset(): void {
     this.sessionData = null;
+    this.currentFrameFirstClickTimestamp = null;
+    this.currentFrameIndex = null;
+    this.currentFrameClickCount = 0;
   }
 }
 
