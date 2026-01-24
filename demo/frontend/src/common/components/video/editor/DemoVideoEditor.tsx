@@ -17,6 +17,7 @@ import TrackletsAnnotation from '@/common/components/annotations/TrackletsAnnota
 import useCloseSessionBeforeUnload from '@/common/components/session/useCloseSessionBeforeUnload';
 import MessagesSnackbar from '@/common/components/snackbar/MessagesSnackbar';
 import useMessagesSnackbar from '@/common/components/snackbar/useDemoMessagesSnackbar';
+import LoRAModeStatusBar from '@/common/components/status/LoRAModeStatusBar';
 import {OBJECT_TOOLBAR_INDEX} from '@/common/components/toolbar/ToolbarConfig';
 import useToolbarTabs from '@/common/components/toolbar/useToolbarTabs';
 import {behaviorTracker} from '@/common/utils/BehaviorTracker';
@@ -307,6 +308,7 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
 
   return (
     <>
+      <LoRAModeStatusBar />
       {(isVideoLoading || session === null) && !isSessionStartFailed && (
         <div {...stylex.props(styles.loadingScreenWrapper)}>
           <LoadingStateScreen

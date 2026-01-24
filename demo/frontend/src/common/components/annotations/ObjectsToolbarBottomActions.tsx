@@ -48,24 +48,44 @@ export default function ObjectsToolbarBottomActions({onTabChange}: Props) {
   }
 
   return (
-    <ToolbarBottomActionsWrapper>
-      <ClearAllPointsInVideoButton
-        onRestart={() => onTabChange(OBJECT_TOOLBAR_INDEX)}
-      />
-      {/* Show tracking buttons when there's an active session */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {/* FPS input in its own row above the buttons */}
       {hasActiveSession && (
-        <>
-          {isTrackingInProgress && <TrackAndPlayButton />}
-          <FrameTrackingButton />
-          <FPSInputBox className="ml-4" />
-        </>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center',
+          paddingTop: '8px',
+          paddingBottom: '4px'
+        }}>
+          <FPSInputBox />
+        </div>
       )}
-      {isTrackingComplete && (
-        <>
-          <ExportBehaviorDataButton />
-          <CloseSessionButton onSessionClose={handleSwitchToEffectsTab} />
-        </>
-      )}
-    </ToolbarBottomActionsWrapper>
+      {/* Start over button in its own row */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center',
+        paddingBottom: '4px'
+      }}>
+        <ClearAllPointsInVideoButton
+          onRestart={() => onTabChange(OBJECT_TOOLBAR_INDEX)}
+        />
+      </div>
+      {/* Main action buttons row */}
+      <ToolbarBottomActionsWrapper>
+        {/* Show tracking buttons when there's an active session */}
+        {hasActiveSession && (
+          <>
+            {isTrackingInProgress && <TrackAndPlayButton />}
+            <FrameTrackingButton />
+          </>
+        )}
+        {isTrackingComplete && (
+          <>
+            <ExportBehaviorDataButton />
+            <CloseSessionButton onSessionClose={handleSwitchToEffectsTab} />
+          </>
+        )}
+      </ToolbarBottomActionsWrapper>
+    </div>
   );
 }
