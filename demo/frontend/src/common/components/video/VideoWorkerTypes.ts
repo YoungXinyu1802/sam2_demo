@@ -121,6 +121,8 @@ export type PlayResponse = Request<'play', unknown>;
 
 export type PauseResponse = Request<'pause', unknown>;
 
+export type VideoEndedAtFinalFrameResponse = Request<'videoEndedAtFinalFrame', unknown>;
+
 export type FrameUpdateResponse = Request<'frameUpdate', FrameUpdateEvent>;
 
 export type RenderingErrorResponse = Request<
@@ -142,6 +144,7 @@ export type VideoWorkerResponse =
   | EncodingCompletedResponse
   | PlayResponse
   | PauseResponse
+  | VideoEndedAtFinalFrameResponse
   | FrameUpdateResponse
   | LoadStartResponse
   | RenderingErrorResponse

@@ -333,6 +333,10 @@ export default class VideoWorkerContext {
     if (nextSampledIndex < maxSampledFrames) {
       const nextFrame = Math.min(nextSampledIndex * frameInterval, this._decodedVideo.numFrames - 1);
       this.goToFrame(nextFrame);
+    } else {
+      // We've reached the last sampled frame - trigger export
+      console.log('[VideoWorkerContext] Reached last sampled frame, triggering export');
+      this.sendResponse('videoEndedAtFinalFrame');
     }
   }
 

@@ -27,6 +27,7 @@ import {
   RenderingErrorEvent,
   SessionStartedEvent,
   TrackletsEvent,
+  VideoEndedAtFinalFrameEvent,
 } from '@/common/components/video/VideoWorkerBridge';
 import VideoEditor from '@/common/components/video/editor/VideoEditor';
 import useResetDemoEditor from '@/common/components/video/editor/useResetEditor';
@@ -197,6 +198,15 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
 
     video?.addEventListener('renderingError', onRenderingError);
 
+    function onVideoEndedAtFinalFrame(_event: VideoEndedAtFinalFrameEvent) {
+      // Automatically export behavior data when video reaches the final frame
+      console.log('[DemoVideoEditor] Video reached final frame, exporting behavior data');
+      behaviorTracker.endSession();
+      behaviorTracker.downloadData();
+    }
+
+    video?.addEventListener('videoEndedAtFinalFrame', onVideoEndedAtFinalFrame);
+
     video?.initializeTracker('SAM 2', {
       inferenceEndpoint: settings.inferenceAPIEndpoint,
     });
@@ -212,6 +222,7 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
       video?.removeEventListener('loraCandidatesGenerated', onLoraCandidatesGenerated);
       video?.removeEventListener('trainingProgress', onTrainingProgress);
       video?.removeEventListener('renderingError', onRenderingError);
+      video?.removeEventListener('videoEndedAtFinalFrame', onVideoEndedAtFinalFrame);
     };
   }, [
     setFrameIndex,

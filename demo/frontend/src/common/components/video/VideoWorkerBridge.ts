@@ -108,6 +108,8 @@ export interface PlayEvent {}
 
 export interface PauseEvent {}
 
+export interface VideoEndedAtFinalFrameEvent {}
+
 export interface FilmstripEvent {
   filmstrip: ImageBitmap;
 }
@@ -173,6 +175,7 @@ export interface VideoWorkerEventMap {
   encodingCompleted: EncodingCompletedEvent;
   play: PlayEvent;
   pause: PauseEvent;
+  videoEndedAtFinalFrame: VideoEndedAtFinalFrameEvent;
   filmstrip: FilmstripEvent;
   frameUpdate: FrameUpdateEvent;
   sessionStarted: SessionStartedEvent;
