@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 import TrackletsAnnotation from '@/common/components/annotations/TrackletsAnnotation';
+import InitializingMemoryPopup from '@/common/components/session/InitializingMemoryPopup';
 import useCloseSessionBeforeUnload from '@/common/components/session/useCloseSessionBeforeUnload';
 import MessagesSnackbar from '@/common/components/snackbar/MessagesSnackbar';
 import useMessagesSnackbar from '@/common/components/snackbar/useDemoMessagesSnackbar';
@@ -45,9 +46,11 @@ import {
   frameIndexAtom,
   frameTrackingEnabledAtom,
   isAddObjectEnabledAtom,
+  isInitializingMemoryAtom,
   isPlayingAtom,
   isVideoLoadingAtom,
   loraMaskCandidatesAtom,
+  memoryInitializedAtom,
   pointsAtom,
   sessionAtom,
   streamingStateAtom,
@@ -115,6 +118,8 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
   const setFrameIndex = useSetAtom(frameIndexAtom);
   const setLoraCandidates = useSetAtom(loraMaskCandidatesAtom);
   const setCorrectedFrames = useSetAtom(correctedFramesAtom);
+  const setIsInitializingMemory = useSetAtom(isInitializingMemoryAtom);
+  const setMemoryInitialized = useSetAtom(memoryInitializedAtom);
   const frameIndex = useAtomValue(frameIndexAtom);
   const points = useAtomValue(pointsAtom);
   const isAddObjectEnabled = useAtomValue(isAddObjectEnabledAtom);
@@ -194,6 +199,21 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
 
     video?.addEventListener('trainingProgress', onTrainingProgress);
 
+    function onMemoryInitializationStatus(event: {isInitializing: boolean}) {
+      setIsInitializingMemory(event.isInitializing);
+      // When initialization completes (transitions from true to false), mark as initialized
+      if (!event.isInitializing) {
+        const timestamp = new Date().toISOString();
+        setMemoryInitialized(true);
+        console.log(`[DemoVideoEditor] 🎯 Memory initialization completed at ${timestamp}`);
+        console.log('[DemoVideoEditor] Setting memoryInitialized to true - timer should start now');
+      } else {
+        console.log('[DemoVideoEditor] Memory initialization started - timer will pause/wait');
+      }
+    }
+
+    video?.addEventListener('memoryInitializationStatus', onMemoryInitializationStatus);
+
     function onRenderingError(event: RenderingErrorEvent) {
       setRenderingError(event.error);
     }
@@ -223,6 +243,7 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
       video?.removeEventListener('trackletsUpdated', onTrackletsUpdated);
       video?.removeEventListener('loraCandidatesGenerated', onLoraCandidatesGenerated);
       video?.removeEventListener('trainingProgress', onTrainingProgress);
+      video?.removeEventListener('memoryInitializationStatus', onMemoryInitializationStatus);
       video?.removeEventListener('renderingError', onRenderingError);
       video?.removeEventListener('videoEndedAtFinalFrame', onVideoEndedAtFinalFrame);
     };
@@ -331,6 +352,7 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
   return (
     <>
       <LoRAModeStatusBar />
+      <InitializingMemoryPopup />
       {(isVideoLoading || session === null) && !isSessionStartFailed && (
         <div {...stylex.props(styles.loadingScreenWrapper)}>
           <LoadingStateScreen

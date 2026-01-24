@@ -686,6 +686,9 @@ class InferenceAPI:
                     frame_idx=frame_idx,
                 )
                 
+                # Check if memory encoder initialization happened
+                memory_encoder_initialized = inference_state.pop("_needs_memory_encoding", False)
+                
                 masks_binary = (video_res_masks > self.score_thresh)[:, 0].cpu().numpy()
                 
                 rle_mask_list = self.__get_rle_mask_list(
@@ -694,7 +697,8 @@ class InferenceAPI:
                 
                 logger.info(
                     f"[InferenceAPI] Frame propagation completed for frame {frame_idx}, "
-                    f"processed {len(obj_ids)} objects, generated {len(rle_mask_list)} masks"
+                    f"processed {len(obj_ids)} objects, generated {len(rle_mask_list)} masks, "
+                    f"memory_encoder_initialized={memory_encoder_initialized}"
                 )
                 logger.info(f"[InferenceAPI] Debug: rle_mask_list = {rle_mask_list}")
                 logger.info(f"[InferenceAPI] Debug: response object_ids = {[item.object_id for item in rle_mask_list]}")
@@ -737,6 +741,7 @@ class InferenceAPI:
                     frame_index=frame_idx,  # Return the frame index that was processed
                     results=rle_mask_list,
                     lora_candidates=lora_candidates,
+                    memory_encoder_initialized=memory_encoder_initialized,
                 )
             except Exception as e:
                 logger.error(f"Error propagating to frame {frame_idx}: {e}")

@@ -188,6 +188,7 @@ export interface VideoWorkerEventMap {
   streamingStarted: StreamingStartedEvent;
   streamingCompleted: StreamingCompletedEvent;
   streamingStateUpdate: StreamingStateUpdateEvent;
+  memoryInitializationStatus: {isInitializing: boolean};
   loraCandidatesGenerated: LoraCandidatesGeneratedEvent;
   trainingProgress: TrainingProgressEvent;
   // HTMLVideoElement events https://developer.mozilla.org/en-US/docs/Web/HTML/Element/video#events

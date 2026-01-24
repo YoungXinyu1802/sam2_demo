@@ -204,6 +204,11 @@ export type TrainingProgressResponse = Request<
   {message: string}
 >;
 
+export type MemoryInitializationStatusResponse = Request<
+  'memoryInitializationStatus',
+  {isInitializing: boolean}
+>;
+
 export type TrackerResponse =
   | SessionStartedResponse
   | SessionStartFailedResponse
@@ -215,6 +220,7 @@ export type TrackerResponse =
   | StreamingStartedResponse
   | StreamingCompletedResponse
   | StreamingStateUpdateResponse
-  | TrainingProgressResponse;
+  | TrainingProgressResponse
+  | MemoryInitializationStatusResponse;
 
 export type TrackerResponseMessageEvent = MessageEvent<TrackerResponse>;

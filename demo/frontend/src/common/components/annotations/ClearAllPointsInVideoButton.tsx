@@ -24,6 +24,7 @@ import {
   frameTrackingEnabledAtom,
   loraMaskCandidatesAtom,
   loraTrainingDataAtom,
+  memoryInitializedAtom,
   sessionAtom,
 } from '@/demo/atoms';
 import {Reset} from '@carbon/icons-react';
@@ -52,6 +53,7 @@ export default function ClearAllPointsInVideoButton({onRestart}: Props) {
   const setFrameTrackingEnabled = useSetAtom(frameTrackingEnabledAtom);
   const setLoraCandidates = useSetAtom(loraMaskCandidatesAtom);
   const setLoraTrainingData = useSetAtom(loraTrainingDataAtom);
+  const setMemoryInitialized = useSetAtom(memoryInitializedAtom);
   const setSession = useSetAtom(sessionAtom);
   const {clearMessage} = useMessagesSnackbar();
   const {restartSession} = useRestartSession();
@@ -88,6 +90,7 @@ export default function ClearAllPointsInVideoButton({onRestart}: Props) {
     setLabelType('positive');
     setLitLoRAModeEnabled(false);
     setFrameTrackingEnabled(false);
+    setMemoryInitialized(false); // Reset memory initialization flag
     setLoraCandidates(null);
     setLoraTrainingData([]);
     

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {frameTrackingEnabledAtom} from '@/demo/atoms';
+import {frameTrackingEnabledAtom, isInitializingMemoryAtom, memoryInitializedAtom} from '@/demo/atoms';
 import stylex from '@stylexjs/stylex';
 import {useAtomValue} from 'jotai';
 import {useEffect, useRef, useState} from 'react';
@@ -60,14 +60,30 @@ export default function SessionTimer() {
   const startTimeRef = useRef<number | null>(null);
   const accumulatedTimeRef = useRef<number>(0);
   const isFrameTrackingEnabled = useAtomValue(frameTrackingEnabledAtom);
+  const isInitializingMemory = useAtomValue(isInitializingMemoryAtom);
+  const memoryInitialized = useAtomValue(memoryInitializedAtom);
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
 
-    if (isFrameTrackingEnabled) {
+    // Only track time when:
+    // 1. Frame tracking is enabled
+    // 2. Memory has been initialized (at least once)
+    // 3. Memory is NOT currently initializing
+    const shouldTrackTime = isFrameTrackingEnabled && memoryInitialized && !isInitializingMemory;
+
+    console.log(`[SessionTimer] Effect triggered - isFrameTrackingEnabled: ${isFrameTrackingEnabled}, memoryInitialized: ${memoryInitialized}, isInitializingMemory: ${isInitializingMemory}, shouldTrackTime: ${shouldTrackTime}`);
+
+    if (shouldTrackTime) {
       // Start tracking time
       if (startTimeRef.current === null) {
-        startTimeRef.current = Date.now();
+        const now = Date.now();
+        startTimeRef.current = now;
+        const timestamp = new Date(now).toISOString();
+        console.log(`[SessionTimer] ⏱️ Timer STARTED at ${timestamp} (${now})`);
+        console.log(`[SessionTimer] Initialization completed - tracking begins now!`);
+      } else {
+        console.log(`[SessionTimer] Resuming timer (already had start time)`);
       }
 
       interval = setInterval(() => {
@@ -75,7 +91,7 @@ export default function SessionTimer() {
           const currentElapsed = Date.now() - startTimeRef.current;
           setElapsedTime(accumulatedTimeRef.current + currentElapsed);
         }
-      }, 1000);
+      }, 100); // Update more frequently for better UX
     } else {
       // Stop tracking time
       if (startTimeRef.current !== null) {
@@ -83,6 +99,9 @@ export default function SessionTimer() {
         accumulatedTimeRef.current += currentElapsed;
         setElapsedTime(accumulatedTimeRef.current);
         startTimeRef.current = null;
+        console.log(`[SessionTimer] Pausing timer - accumulated time: ${accumulatedTimeRef.current}ms`);
+      } else {
+        console.log(`[SessionTimer] Timer not started yet, nothing to pause`);
       }
     }
 
@@ -91,7 +110,7 @@ export default function SessionTimer() {
         clearInterval(interval);
       }
     };
-  }, [isFrameTrackingEnabled]);
+  }, [isFrameTrackingEnabled, memoryInitialized, isInitializingMemory]);
 
   const formatTime = (milliseconds: number): string => {
     const totalSeconds = Math.floor(milliseconds / 1000);
@@ -105,12 +124,23 @@ export default function SessionTimer() {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  // Determine the status message
+  const getStatus = () => {
+    if (!isFrameTrackingEnabled) {
+      return '○ Paused';
+    }
+    if (!memoryInitialized || isInitializingMemory) {
+      return '⏸ Waiting...';
+    }
+    return '● Recording';
+  };
+
   return (
     <div {...stylex.props(styles.container)}>
       <div {...stylex.props(styles.label)}>Session Time</div>
       <div {...stylex.props(styles.time)}>{formatTime(elapsedTime)}</div>
       <div {...stylex.props(styles.status)}>
-        {isFrameTrackingEnabled ? '● Recording' : '○ Paused'}
+        {getStatus()}
       </div>
     </div>
   );

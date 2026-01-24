@@ -215,6 +215,7 @@ class PropagateDataResponse:
     frame_index: int
     results: List[PropagateDataValue]
     lora_candidates: Optional[List[LoRACandidateValue]] = None
+    memory_encoder_initialized: Optional[bool] = None
 
 
 @dataclass_json

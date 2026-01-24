@@ -70,6 +70,10 @@ export const frameTrackingEnabledAtom = atom<boolean>(false);
 
 export const trackingFpsAtom = atom<number>(5); // Default 5 FPS for frame tracking
 
+export const isInitializingMemoryAtom = atom<boolean>(false);
+
+export const memoryInitializedAtom = atom<boolean>(false); // Tracks if memory encoder has been initialized at least once
+
 // Track unique frames that have corrections
 export const correctedFramesAtom = atom<Set<number>>(new Set<number>());
 

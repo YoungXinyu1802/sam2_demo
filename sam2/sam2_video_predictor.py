@@ -690,8 +690,39 @@ class SAM2VideoPredictor(SAM2Base):
         """
         print(f"[SAM2VideoPredictor] Processing frame {frame_idx}")
         
+        # Check if memory encoding needs to happen (first time tracking)
+        needs_memory_encoding = False
+        batch_size = self._get_obj_num(inference_state)
+        if batch_size > 0:
+            for obj_idx in range(batch_size):
+                obj_temp_output_dict = inference_state["temp_output_dict_per_obj"][obj_idx]
+                # Check if there are temporary outputs that need memory encoding
+                for is_cond in [False, True]:
+                    storage_key = "cond_frame_outputs" if is_cond else "non_cond_frame_outputs"
+                    for frame_idx_temp, out in obj_temp_output_dict[storage_key].items():
+                        if out.get("maskmem_features") is None:
+                            needs_memory_encoding = True
+                            break
+                    if needs_memory_encoding:
+                        break
+                if needs_memory_encoding:
+                    break
+        
+        # Store whether memory encoding was needed
+        inference_state["_needs_memory_encoding"] = needs_memory_encoding
+        
+        if needs_memory_encoding:
+            import datetime
+            timestamp = datetime.datetime.now().isoformat()
+            print(f"[SAM2VideoPredictor] 🔧 Memory encoder initialization STARTING at {timestamp}")
+        
         # First, ensure we have consolidated outputs before tracking
         self.propagate_in_video_preflight(inference_state)
+        
+        if needs_memory_encoding:
+            import datetime
+            timestamp = datetime.datetime.now().isoformat()
+            print(f"[SAM2VideoPredictor] ✅ Memory encoder initialization COMPLETED at {timestamp}")
         
         obj_ids = inference_state["obj_ids"]
         batch_size = self._get_obj_num(inference_state)

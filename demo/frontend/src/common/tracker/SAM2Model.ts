@@ -36,6 +36,7 @@ import {
 import {TrackerOptions} from '@/common/tracker/Trackers';
 import {
   ClearPointsInVideoResponse,
+  MemoryInitializationStatusResponse,
   SessionStartFailedResponse,
   SessionStartedResponse,
   StreamingCompletedResponse,
@@ -96,6 +97,7 @@ export class SAM2Model extends Tracker {
   private _litLoRAModeEnabled: boolean = false;
   private _trackingFps: number = 5; // Default tracking FPS
   private _trainedFrames: Set<string> = new Set(); // Track which frames have been trained (format: "objectId:frameIndex")
+  private _memoryEncoderInitialized: boolean = false; // Track if memory encoder has been initialized
 
   private _emptyMask: RLEObject | null = null;
 
@@ -727,6 +729,15 @@ export class SAM2Model extends Tracker {
         await this._trainLoraBeforePropagation();
       }
       
+      // Show initialization popup only on the first trackFrame call (when memory encoder needs initialization)
+      const needsInitialization = !this._memoryEncoderInitialized;
+      if (needsInitialization) {
+        console.log(`[SAM2Model] First frame tracking call - showing initialization popup`);
+        this._sendResponse<MemoryInitializationStatusResponse>('memoryInitializationStatus', {
+          isInitializing: true,
+        });
+      }
+      
       const url = `${this._endpoint}/propagate_to_frame`;
       
       // Use stored tracking FPS
@@ -759,6 +770,20 @@ export class SAM2Model extends Tracker {
       
       const jsonResponse = await response.json();
       console.log(`[SAM2Model] Debug: Full response for frame ${frameIndex}:`, jsonResponse);
+      
+      // Check if memory encoder initialization happened
+      const memoryEncoderInitialized = jsonResponse.memory_encoder_initialized || false;
+      console.log(`[SAM2Model] Memory encoder initialized: ${memoryEncoderInitialized}`);
+      
+      // If initialization happened, mark it as done and hide the popup
+      if (needsInitialization) {
+        this._memoryEncoderInitialized = true;
+        this._sendResponse<MemoryInitializationStatusResponse>('memoryInitializationStatus', {
+          isInitializing: false,
+        });
+        console.log(`[SAM2Model] Memory encoder initialization completed, hiding popup`);
+      }
+      
       const maskResults = jsonResponse.results;
       console.log(`[SAM2Model] Debug: maskResults =`, maskResults);
       const rleMaskList = maskResults.map(
@@ -814,6 +839,9 @@ export class SAM2Model extends Tracker {
     this._frameTrackingEnabled = true;
     this._context.enableFrameTracking(true);
     this._updateStreamingState('full');
+    
+    // Reset memory encoder initialization flag so popup shows on first frame
+    this._memoryEncoderInitialized = false;
     
     // Reinitialize session with sampled frames for better performance
     await this._reinitializeSessionForTracking();
@@ -1121,6 +1149,7 @@ export class SAM2Model extends Tracker {
       this._litLoRAModeEnabled = false;
       this._frameTrackingEnabled = false;
       this._trainedFrames.clear(); // Clear trained frames tracking
+      this._memoryEncoderInitialized = false; // Reset memory encoder initialization flag
       
       // Disable frame tracking in context
       this._context.enableFrameTracking(false);

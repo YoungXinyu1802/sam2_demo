@@ -19,10 +19,11 @@ import {behaviorTracker} from '@/common/utils/BehaviorTracker';
 import useVideo from '@/common/components/video/editor/useVideo';
 import {
   frameTrackingEnabledAtom,
+  memoryInitializedAtom,
   streamingStateAtom,
 } from '@/demo/atoms';
 import {Renew, Stop} from '@carbon/icons-react';
-import {useAtom, useAtomValue} from 'jotai';
+import {useAtom, useAtomValue, useSetAtom} from 'jotai';
 import {useCallback} from 'react';
 
 export default function FrameTrackingButton() {
@@ -32,6 +33,7 @@ export default function FrameTrackingButton() {
   const [isFrameTrackingEnabled, setIsFrameTrackingEnabled] = useAtom(
     frameTrackingEnabledAtom,
   );
+  const setMemoryInitialized = useSetAtom(memoryInitializedAtom);
 
   // Note: Frame tracking can now be enabled before objects are initialized
 
@@ -52,15 +54,19 @@ export default function FrameTrackingButton() {
       enqueueMessage('frameTrackingEnabled');
       video?.enableFrameTracking();
       setIsFrameTrackingEnabled(true);
+      // Reset memory initialized flag - will be set again after first frame tracking
+      setMemoryInitialized(false);
       behaviorTracker.logTrackingEvent('enable_frame_tracking');
     } else {
       // Disable frame tracking
       enqueueMessage('frameTrackingDisabled');
       video?.disableFrameTracking();
       setIsFrameTrackingEnabled(false);
+      // Reset memory initialized flag when stopping
+      setMemoryInitialized(false);
       behaviorTracker.logTrackingEvent('disable_frame_tracking');
     }
-  }, [isFrameTrackingEnabled, isDisabled, video, enqueueMessage]);
+  }, [isFrameTrackingEnabled, isDisabled, video, enqueueMessage, setMemoryInitialized]);
 
   return (
     <PrimaryCTAButton
