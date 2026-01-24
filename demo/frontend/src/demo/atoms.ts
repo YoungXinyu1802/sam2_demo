@@ -77,6 +77,9 @@ export const memoryInitializedAtom = atom<boolean>(false); // Tracks if memory e
 // Track unique frames that have corrections
 export const correctedFramesAtom = atom<Set<number>>(new Set<number>());
 
+// Session reset key - increment this to trigger timer reset
+export const sessionResetKeyAtom = atom<number>(0);
+
 // Derived atom to get the count of corrected frames
 export const correctionsCountAtom = atom<number>(get => {
   return get(correctedFramesAtom).size;

@@ -49,6 +49,7 @@ import {
 } from '@/common/tracker/TrackerTypes';
 import {convertMaskToRGBA} from '@/common/utils/MaskUtils';
 import multipartStream from '@/common/utils/MultipartStream';
+import {behaviorTracker} from '@/common/utils/BehaviorTracker';
 import {Stats} from '@/debug/stats/Stats';
 import {INFERENCE_API_ENDPOINT} from '@/demo/DemoConfig';
 import {createEnvironment} from '@/graphql/RelayEnvironment';
@@ -69,6 +70,7 @@ type Options = Pick<TrackerOptions, 'inferenceEndpoint'>;
 type Session = {
   id: string | null;
   tracklets: {[id: number]: Tracklet};
+  videoPath: string | null; // Store video path for behavior tracker restart
 };
 
 type StreamMasksResult = {
@@ -91,6 +93,7 @@ export class SAM2Model extends Tracker {
   private _session: Session = {
     id: null,
     tracklets: {},
+    videoPath: null,
   };
   private _streamingState: StreamingState = 'none';
   private _frameTrackingEnabled: boolean = false;
@@ -148,6 +151,7 @@ export class SAM2Model extends Tracker {
             const {sessionId} = response.startSession;
             console.log(`[SAM2Model] Session started with ID: ${sessionId}`);
             this._session.id = sessionId;
+            this._session.videoPath = videoPath; // Store video path for later use
 
             this._sendResponse<SessionStartedResponse>('sessionStarted', {
               sessionId,
@@ -1157,6 +1161,30 @@ export class SAM2Model extends Tracker {
       // Clear LoRA candidates
       this._context.clearLoraCandidates();
       
+      // Reset behavior tracker and restart with the same session
+      // NOTE: This resets the worker's instance, but the main thread also needs to be reset
+      // The main thread reset will be triggered via a response event
+      Logger.info('[StartOver] About to reset BehaviorTracker in worker');
+      Logger.info('[StartOver] Current sessionId:', sessionId);
+      Logger.info('[StartOver] Current videoPath:', this._session.videoPath);
+      
+      behaviorTracker.reset();
+      
+      if (sessionId && this._session.videoPath) {
+        Logger.info('[StartOver] Restarting BehaviorTracker in worker with sessionId:', sessionId, 'videoPath:', this._session.videoPath);
+        behaviorTracker.startSession(sessionId, this._session.videoPath);
+        Logger.info('[StartOver] BehaviorTracker session restarted successfully in worker');
+      } else {
+        Logger.warn('[StartOver] Cannot restart BehaviorTracker in worker - missing sessionId or videoPath');
+        Logger.warn('[StartOver] sessionId:', sessionId, 'videoPath:', this._session.videoPath);
+      }
+      
+      // Send a response to the main thread so it can also reset its behaviorTracker
+      this._sendResponse<any>('startOverCompleted', {
+        sessionId: sessionId,
+        videoPath: this._session.videoPath,
+      });
+      
       Logger.info('All states reset to original condition');
     } catch (error) {
       Logger.error('Failed to start over:', error);
@@ -1283,6 +1311,7 @@ export class SAM2Model extends Tracker {
 
   private _cleanup() {
     this._session.id = null;
+    this._session.videoPath = null;
     // Clear existing tracklets
     this._session.tracklets = [];
     // Clear trained frames tracking

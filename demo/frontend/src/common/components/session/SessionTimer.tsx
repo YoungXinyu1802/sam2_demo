@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {frameTrackingEnabledAtom, isInitializingMemoryAtom, memoryInitializedAtom} from '@/demo/atoms';
+import {frameTrackingEnabledAtom, isInitializingMemoryAtom, memoryInitializedAtom, sessionResetKeyAtom} from '@/demo/atoms';
 import stylex from '@stylexjs/stylex';
 import {useAtomValue} from 'jotai';
 import {useEffect, useRef, useState} from 'react';
@@ -62,6 +62,17 @@ export default function SessionTimer() {
   const isFrameTrackingEnabled = useAtomValue(frameTrackingEnabledAtom);
   const isInitializingMemory = useAtomValue(isInitializingMemoryAtom);
   const memoryInitialized = useAtomValue(memoryInitializedAtom);
+  const sessionResetKey = useAtomValue(sessionResetKeyAtom);
+
+  // Reset timer when session is reset
+  useEffect(() => {
+    if (sessionResetKey > 0) {
+      console.log(`[SessionTimer] Resetting timer due to session reset (key: ${sessionResetKey})`);
+      startTimeRef.current = null;
+      accumulatedTimeRef.current = 0;
+      setElapsedTime(0);
+    }
+  }, [sessionResetKey]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;

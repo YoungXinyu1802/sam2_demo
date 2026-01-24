@@ -56,22 +56,44 @@ class BehaviorTracker {
   private currentFrameClickCount: number = 0;
   private currentFrameLoraTrainingTime: number | null = null;
   private loraTrainingTimesByFrame: Map<number, number> = new Map();
+  private sessionCounter: number = 0; // Track how many times we've created a session
 
   startSession(sessionId: string | null, videoName: string | null): void {
+    this.sessionCounter++;
+    const sessionNumber = this.sessionCounter;
+    
+    console.log(`[BehaviorTracker] 🔄 Starting new session #${sessionNumber}:`, sessionId, 'for video:', videoName);
+    
+    // Create completely new arrays (not reusing any references)
+    const newClicks: ClickEvent[] = [];
+    const newTrackingEvents: TrackingEvent[] = [];
+    const newFrameCorrectionTimes: FrameCorrectionTime[] = [];
+    
+    console.log(`[BehaviorTracker] Created new arrays - clicks ID:`, newClicks, 'frameCorrectionTimes ID:', newFrameCorrectionTimes);
+    
     this.sessionData = {
       sessionId,
       startTime: 0, // Will be set when frame tracking is enabled
       endTime: null,
-      clicks: [],
-      trackingEvents: [],
+      clicks: newClicks,
+      trackingEvents: newTrackingEvents,
       videoName,
-      frameCorrectionTimes: [],
+      frameCorrectionTimes: newFrameCorrectionTimes,
     };
+    
+    // Store the session number for debugging
+    (this.sessionData as any)._sessionNumber = sessionNumber;
+    
     this.currentFrameFirstClickTimestamp = null;
     this.currentFrameIndex = null;
     this.currentFrameClickCount = 0;
     this.currentFrameLoraTrainingTime = null;
     this.loraTrainingTimesByFrame.clear();
+    
+    console.log(`[BehaviorTracker] ✓ New session #${sessionNumber} started with empty arrays`);
+    console.log('[BehaviorTracker] clicks length:', this.sessionData.clicks.length);
+    console.log('[BehaviorTracker] frameCorrectionTimes length:', this.sessionData.frameCorrectionTimes.length);
+    console.log('[BehaviorTracker] sessionData reference:', this.sessionData);
   }
 
   logClick(
@@ -82,10 +104,13 @@ class BehaviorTracker {
     isCorrection: boolean = false,
   ): void {
     if (!this.sessionData) {
+      console.log('[BehaviorTracker] ⚠️ logClick called but no session data!');
       return;
     }
 
     const timestamp = Date.now();
+    
+    console.log(`[BehaviorTracker] 📍 logClick: frame=${frameIndex}, obj=${objectId}, isCorrection=${isCorrection}, total clicks before: ${this.sessionData.clicks.length}`);
 
     this.sessionData.clicks.push({
       timestamp,
@@ -95,6 +120,8 @@ class BehaviorTracker {
       label,
       isCorrection,
     });
+    
+    console.log(`[BehaviorTracker] 📍 Click added, total clicks now: ${this.sessionData.clicks.length}`);
 
     // Track correction time for this frame
     if (isCorrection) {
@@ -146,10 +173,13 @@ class BehaviorTracker {
 
   logFrameTransition(newFrameIndex: number): void {
     if (!this.sessionData) {
+      console.log('[BehaviorTracker] ⚠️ logFrameTransition called but no session data!');
       return;
     }
 
     const timestamp = Date.now();
+    
+    console.log(`[BehaviorTracker] 🔄 logFrameTransition: from frame ${this.currentFrameIndex} to frame ${newFrameIndex}`);
 
     // If we have a pending correction time to record
     if (
@@ -158,6 +188,8 @@ class BehaviorTracker {
       this.currentFrameIndex !== newFrameIndex
     ) {
       const correctionTimeMs = timestamp - this.currentFrameFirstClickTimestamp;
+      
+      console.log(`[BehaviorTracker] 📊 Recording frameCorrectionTime for frame ${this.currentFrameIndex}, total before: ${this.sessionData.frameCorrectionTimes.length}`);
       
       const frameCorrectionTime: FrameCorrectionTime = {
         frameIndex: this.currentFrameIndex,
@@ -169,6 +201,8 @@ class BehaviorTracker {
       };
 
       this.sessionData.frameCorrectionTimes.push(frameCorrectionTime);
+      
+      console.log(`[BehaviorTracker] 📊 FrameCorrectionTime added, total now: ${this.sessionData.frameCorrectionTimes.length}`);
 
       // Update all correction clicks for this frame with the correction time and LoRA time
       this.sessionData.clicks.forEach(click => {
@@ -255,10 +289,20 @@ class BehaviorTracker {
   }
 
   endSession(): void {
+    console.log('[BehaviorTracker] 🏁 endSession called');
+    console.log('[BehaviorTracker] sessionData exists?', this.sessionData !== null);
+    
     if (!this.sessionData) {
+      console.log('[BehaviorTracker] ❌ No session data to end');
       return;
     }
 
+    const sessionNumber = (this.sessionData as any)._sessionNumber || 'unknown';
+    console.log(`[BehaviorTracker] Ending session #${sessionNumber}`);
+    console.log('[BehaviorTracker] sessionData reference:', this.sessionData);
+    console.log('[BehaviorTracker] Before endSession - clicks:', this.sessionData.clicks.length);
+    console.log('[BehaviorTracker] Before endSession - frameCorrectionTimes:', this.sessionData.frameCorrectionTimes.length);
+    
     this.sessionData.endTime = Date.now();
     
     if (this.sessionData.startTime > 0) {
@@ -267,18 +311,28 @@ class BehaviorTracker {
     } else {
       console.log('[BehaviorTracker] Session ended, but frame tracking was never enabled (no duration recorded)');
     }
+    
+    console.log('[BehaviorTracker] After endSession - clicks:', this.sessionData.clicks.length);
+    console.log('[BehaviorTracker] After endSession - frameCorrectionTimes:', this.sessionData.frameCorrectionTimes.length);
   }
 
   exportData(): string {
     if (!this.sessionData) {
+      console.log('[BehaviorTracker] ❌ exportData called but no session data available');
       return JSON.stringify({error: 'No session data available'});
     }
 
+    const sessionNumber = (this.sessionData as any)._sessionNumber || 'unknown';
+    
     // Debug: Check what's in the loraTrainingTimesByFrame map
-    console.log('[BehaviorTracker] exportData called');
+    console.log(`[BehaviorTracker] 📤 exportData called for session #${sessionNumber}`);
+    console.log('[BehaviorTracker] sessionData reference:', this.sessionData);
+    console.log('[BehaviorTracker] Session ID:', this.sessionData.sessionId);
+    console.log('[BehaviorTracker] Total clicks:', this.sessionData.clicks.length);
+    console.log('[BehaviorTracker] Total tracking events:', this.sessionData.trackingEvents.length);
+    console.log('[BehaviorTracker] frameCorrectionTimes:', this.sessionData.frameCorrectionTimes.length);
     console.log('[BehaviorTracker] loraTrainingTimesByFrame size:', this.loraTrainingTimesByFrame.size);
     console.log('[BehaviorTracker] loraTrainingTimesByFrame contents:', Array.from(this.loraTrainingTimesByFrame.entries()));
-    console.log('[BehaviorTracker] frameCorrectionTimes:', this.sessionData.frameCorrectionTimes);
 
     // Calculate duration only if startTime has been set (frame tracking was enabled)
     let totalDuration = 0;
@@ -384,7 +438,24 @@ class BehaviorTracker {
   }
 
   downloadData(filename?: string): void {
+    console.log('[BehaviorTracker] 💾 downloadData called');
+    console.log('[BehaviorTracker] sessionData exists?', this.sessionData !== null);
+    if (this.sessionData) {
+      console.log('[BehaviorTracker] sessionData.clicks.length:', this.sessionData.clicks.length);
+      console.log('[BehaviorTracker] sessionData.frameCorrectionTimes.length:', this.sessionData.frameCorrectionTimes.length);
+      console.log('[BehaviorTracker] Full sessionData:', JSON.stringify({
+        sessionId: this.sessionData.sessionId,
+        clicksCount: this.sessionData.clicks.length,
+        frameCorrectionTimesCount: this.sessionData.frameCorrectionTimes.length,
+        trackingEventsCount: this.sessionData.trackingEvents.length,
+      }));
+    }
+    
     const data = this.exportData();
+    
+    console.log('[BehaviorTracker] About to create blob with data length:', data.length);
+    console.log('[BehaviorTracker] First 500 chars of export:', data.substring(0, 500));
+    
     const blob = new Blob([data], {type: 'application/json'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -397,12 +468,18 @@ class BehaviorTracker {
   }
 
   reset(): void {
+    console.log('[BehaviorTracker] ⚠️ RESET called - clearing all session data');
+    console.log('[BehaviorTracker] Before reset - clicks:', this.sessionData?.clicks.length || 0);
+    console.log('[BehaviorTracker] Before reset - frameCorrectionTimes:', this.sessionData?.frameCorrectionTimes.length || 0);
+    
     this.sessionData = null;
     this.currentFrameFirstClickTimestamp = null;
     this.currentFrameIndex = null;
     this.currentFrameClickCount = 0;
     this.currentFrameLoraTrainingTime = null;
     this.loraTrainingTimesByFrame.clear();
+    
+    console.log('[BehaviorTracker] ✓ Reset complete - sessionData set to null');
   }
 }
 

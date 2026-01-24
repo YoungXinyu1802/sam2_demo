@@ -16,6 +16,8 @@
 import useRestartSession from '@/common/components/session/useRestartSession';
 import useMessagesSnackbar from '@/common/components/snackbar/useDemoMessagesSnackbar';
 import useVideo from '@/common/components/video/editor/useVideo';
+import useInputVideo from '@/common/components/video/useInputVideo';
+import {behaviorTracker} from '@/common/utils/BehaviorTracker';
 import {
   isPlayingAtom,
   isStreamingAtom,
@@ -26,6 +28,8 @@ import {
   loraTrainingDataAtom,
   memoryInitializedAtom,
   sessionAtom,
+  correctedFramesAtom,
+  sessionResetKeyAtom,
 } from '@/demo/atoms';
 import {Reset} from '@carbon/icons-react';
 import stylex from '@stylexjs/stylex';
@@ -48,6 +52,7 @@ export default function ClearAllPointsInVideoButton({onRestart}: Props) {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const isPlaying = useAtomValue(isPlayingAtom);
   const isStreaming = useAtomValue(isStreamingAtom);
+  const session = useAtomValue(sessionAtom);
   const setLabelType = useSetAtom(labelTypeAtom);
   const setLitLoRAModeEnabled = useSetAtom(litLoRAModeEnabledAtom);
   const setFrameTrackingEnabled = useSetAtom(frameTrackingEnabledAtom);
@@ -55,8 +60,11 @@ export default function ClearAllPointsInVideoButton({onRestart}: Props) {
   const setLoraTrainingData = useSetAtom(loraTrainingDataAtom);
   const setMemoryInitialized = useSetAtom(memoryInitializedAtom);
   const setSession = useSetAtom(sessionAtom);
+  const setCorrectedFrames = useSetAtom(correctedFramesAtom);
+  const setSessionResetKey = useSetAtom(sessionResetKeyAtom);
   const {clearMessage} = useMessagesSnackbar();
   const {restartSession} = useRestartSession();
+  const {inputVideo} = useInputVideo();
 
   const video = useVideo();
 
@@ -80,6 +88,22 @@ export default function ClearAllPointsInVideoButton({onRestart}: Props) {
       console.error('Failed to reset LoRA states:', error);
     }
     
+    // Reset BehaviorTracker in the main thread (the worker also resets its own instance)
+    console.log('[ClearAllPointsInVideoButton] Resetting main thread BehaviorTracker');
+    console.log('[ClearAllPointsInVideoButton] Current session:', session);
+    console.log('[ClearAllPointsInVideoButton] Input video:', inputVideo);
+    
+    behaviorTracker.reset();
+    
+    // Restart the session with current session ID and video path
+    if (session?.id && inputVideo?.path) {
+      console.log('[ClearAllPointsInVideoButton] Restarting BehaviorTracker with session:', session.id, 'video:', inputVideo.path);
+      behaviorTracker.startSession(session.id, inputVideo.path);
+    } else {
+      console.warn('[ClearAllPointsInVideoButton] No session ID or video path available to restart BehaviorTracker');
+      console.warn('[ClearAllPointsInVideoButton] session:', session, 'inputVideo:', inputVideo);
+    }
+    
     const isSuccessful = await video.clearPointsInVideo();
     if (!isSuccessful) {
       await restartSession();
@@ -93,6 +117,8 @@ export default function ClearAllPointsInVideoButton({onRestart}: Props) {
     setMemoryInitialized(false); // Reset memory initialization flag
     setLoraCandidates(null);
     setLoraTrainingData([]);
+    setCorrectedFrames(new Set<number>()); // Reset correction counter
+    setSessionResetKey(prev => prev + 1); // Trigger timer reset
     
     // Reset session ranPropagation flag
     setSession(prev => {
