@@ -166,6 +166,8 @@ export interface LoraCandidatesGeneratedEvent {
 
 export interface TrainingProgressEvent {
   message: string;
+  trainingTimeMs?: number;
+  frameIndex?: number;
 }
 
 export interface VideoWorkerEventMap {

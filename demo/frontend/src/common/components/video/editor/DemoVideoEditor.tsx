@@ -195,8 +195,23 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
 
     video?.addEventListener('loraCandidatesGenerated', onLoraCandidatesGenerated);
 
-    function onTrainingProgress() {
+    function onTrainingProgress(event: any) {
+      console.log('[DemoVideoEditor] onTrainingProgress event received:', event);
+      console.log('[DemoVideoEditor] event.trainingTimeMs:', event.trainingTimeMs);
+      console.log('[DemoVideoEditor] event.frameIndex:', event.frameIndex);
+      console.log('[DemoVideoEditor] event type:', typeof event);
+      console.log('[DemoVideoEditor] event keys:', Object.keys(event));
+      
       enqueueMessage('correctionSaved');
+      
+      // Log LoRA training time if available
+      if (event.trainingTimeMs !== undefined && event.frameIndex !== undefined) {
+        console.log(`[DemoVideoEditor] Calling behaviorTracker.logLoraTrainingTime(${event.frameIndex}, ${event.trainingTimeMs})`);
+        behaviorTracker.logLoraTrainingTime(event.frameIndex, event.trainingTimeMs);
+      } else {
+        console.log('[DemoVideoEditor] NOT calling logLoraTrainingTime - missing data');
+        console.log(`[DemoVideoEditor] trainingTimeMs: ${event.trainingTimeMs}, frameIndex: ${event.frameIndex}`);
+      }
     }
 
     video?.addEventListener('trainingProgress', onTrainingProgress);

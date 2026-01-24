@@ -752,7 +752,13 @@ class InferenceAPI:
         Add a training sample and train LoRA immediately (following online_eval.py workflow).
         This ensures features are fresh when training happens.
         """
+        import time
+        overall_start_time = time.time()
+        logger.info(f"[LoRA Timing] Starting train_lora at {overall_start_time}")
+        
         with self.autocast_context(), self.inference_lock:
+            training_start_time = time.time()
+            logger.info(f"[LoRA Timing] Lock acquired, starting training logic at {training_start_time}")
             try:
                 session_id = request.session_id
                 obj_id = request.object_id
@@ -811,9 +817,14 @@ class InferenceAPI:
                 
                 # Train LoRA IMMEDIATELY after adding mask (following online_eval.py workflow)
                 # This ensures temp_feat_for_lora has the correct features
-                if not hasattr(self.predictor, 'trained_lora') or not self.predictor.trained_lora:
+                has_trained_attr = hasattr(self.predictor, 'trained_lora')
+                is_trained = self.predictor.trained_lora if has_trained_attr else False
+                logger.info(f"[LoRA Timing] has_trained_lora attribute: {has_trained_attr}, is_trained: {is_trained}")
+                
+                if not has_trained_attr or not is_trained:
                     # First correction: train initial LoRA model
-                    logger.info("Training initial LoRA model")
+                    lora_train_start = time.time()
+                    logger.info(f"[LoRA Timing] Training initial LoRA model starting at {lora_train_start}")
 
                     logger.info(f"temp_feat_for_lora: {self.predictor.temp_feat_for_lora.keys()}")
                     frame_idx = self.predictor.temp_feat_for_lora.get("frame_idx")
@@ -838,6 +849,10 @@ class InferenceAPI:
                         model_idx=0
                     )
                     
+                    lora_train_end = time.time()
+                    lora_only_time = (lora_train_end - lora_train_start) * 1000
+                    logger.info(f"[LoRA Timing] Initial LoRA training took {lora_only_time:.2f}ms")
+                    
                     if training_success:
                         logger.info("Initial LoRA model trained successfully")
                     else:
@@ -845,7 +860,8 @@ class InferenceAPI:
                     self.predictor.trained_lora = True
                 elif self.predictor.trained_lora:
                     # Subsequent corrections: could fine-tune existing LoRA
-                    logger.info("LoRA already trained, could fine-tune in future")
+                    lora_finetune_start = time.time()
+                    logger.info(f"[LoRA Timing] Fine-tuning existing LoRA starting at {lora_finetune_start}")
                     # For now, we'll just add to training data for potential future fine-tuning
                     self.predictor.train_lora(
                         self.predictor.multi_lora[len(self.predictor.multi_lora) - 1],
@@ -854,6 +870,9 @@ class InferenceAPI:
                         mode='finetune',
                         model_idx=0
                     )
+                    lora_finetune_end = time.time()
+                    lora_finetune_time = (lora_finetune_end - lora_finetune_start) * 1000
+                    logger.info(f"[LoRA Timing] LoRA fine-tuning took {lora_finetune_time:.2f}ms")
 
                 
                 # Store the GT mask for tracking
@@ -863,19 +882,31 @@ class InferenceAPI:
                 })
                 
                 num_samples = len(self.lora_training_data[session_id][obj_id])
-                logger.info(f"LoRA training sample added. Total samples: {num_samples}")
+                training_end_time = time.time()
+                training_time_ms = (training_end_time - training_start_time) * 1000
+                overall_time_ms = (training_end_time - overall_start_time) * 1000
                 
-                return TrainLoRAResponse(
+                logger.info(f"[LoRA Timing] Training completed at {training_end_time}")
+                logger.info(f"[LoRA Timing] Training time (without lock): {training_time_ms:.2f}ms")
+                logger.info(f"[LoRA Timing] Overall time (with lock): {overall_time_ms:.2f}ms")
+                logger.info(f"LoRA training sample added. Total samples: {num_samples}, Training time: {training_time_ms:.2f}ms")
+                
+                response = TrainLoRAResponse(
                     success=True,
-                    message=f"Training sample added and LoRA trained. Total samples: {num_samples}"
+                    message=f"Training sample added and LoRA trained. Total samples: {num_samples}",
+                    training_time_ms=training_time_ms
                 )
+                logger.info(f"[LoRA Timing] Returning response with training_time_ms={response.training_time_ms}")
+                return response
             except Exception as e:
                 logger.error(f"Error adding LoRA training sample: {e}")
                 import traceback
                 traceback.print_exc()
+                training_time_ms = (time.time() - training_start_time) * 1000
                 return TrainLoRAResponse(
                     success=False,
-                    message=f"Error: {str(e)}"
+                    message=f"Error: {str(e)}",
+                    training_time_ms=training_time_ms
                 )
 
     def generate_lora_candidates(

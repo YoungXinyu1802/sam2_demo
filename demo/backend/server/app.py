@@ -190,7 +190,9 @@ def train_lora() -> Response:
         )
         
         response = inference_api.train_lora(request=req)
-        return make_response(response.to_json(), 200)
+        response_json = response.to_json()
+        logger.info(f"[LoRA Timing] Sending response to frontend: {response_json}")
+        return make_response(response_json, 200)
     except Exception as e:
         logger.error(f"Error in train_lora: {e}", exc_info=True)
         return make_response({"error": str(e)}, 500)

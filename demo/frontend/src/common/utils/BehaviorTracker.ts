@@ -22,6 +22,7 @@ export type ClickEvent = {
   label: number; // 1 for positive, 0 for negative
   isCorrection: boolean; // true if added during frame tracking
   correctionTimeMs?: number; // time spent correcting this frame (populated after frame transition)
+  loraTrainingTimeMs?: number; // LoRA training time for this frame (if LoRA was trained)
 };
 
 export type TrackingEvent = {
@@ -35,6 +36,7 @@ export type FrameCorrectionTime = {
   frameExitTimestamp: number;
   correctionTimeMs: number;
   clickCount: number;
+  loraTrainingTimeMs?: number;
 };
 
 export type SessionData = {
@@ -52,6 +54,8 @@ class BehaviorTracker {
   private currentFrameFirstClickTimestamp: number | null = null;
   private currentFrameIndex: number | null = null;
   private currentFrameClickCount: number = 0;
+  private currentFrameLoraTrainingTime: number | null = null;
+  private loraTrainingTimesByFrame: Map<number, number> = new Map();
 
   startSession(sessionId: string | null, videoName: string | null): void {
     this.sessionData = {
@@ -66,6 +70,8 @@ class BehaviorTracker {
     this.currentFrameFirstClickTimestamp = null;
     this.currentFrameIndex = null;
     this.currentFrameClickCount = 0;
+    this.currentFrameLoraTrainingTime = null;
+    this.loraTrainingTimesByFrame.clear();
   }
 
   logClick(
@@ -93,10 +99,23 @@ class BehaviorTracker {
     // Track correction time for this frame
     if (isCorrection) {
       if (this.currentFrameIndex !== frameIndex) {
-        // New frame - reset tracking
+        // New frame - reset tracking and check if we have LoRA training time for this frame
         this.currentFrameIndex = frameIndex;
         this.currentFrameFirstClickTimestamp = timestamp;
         this.currentFrameClickCount = 1;
+        
+        // Check if we have a stored LoRA training time for this frame
+        console.log(`[BehaviorTracker] Checking for stored LoRA time for frame ${frameIndex}`);
+        console.log(`[BehaviorTracker] Available frames with LoRA training:`, Array.from(this.loraTrainingTimesByFrame.keys()));
+        const storedLoraTime = this.loraTrainingTimesByFrame.get(frameIndex);
+        if (storedLoraTime) {
+          this.currentFrameLoraTrainingTime = storedLoraTime;
+          console.log(`[BehaviorTracker] ✓ Found stored LoRA training time for frame ${frameIndex}: ${storedLoraTime.toFixed(2)}ms`);
+        } else {
+          this.currentFrameLoraTrainingTime = null;
+          console.log(`[BehaviorTracker] ✗ No stored LoRA training time for frame ${frameIndex}`);
+        }
+        
         console.log(`[BehaviorTracker] Started tracking correction time for frame ${frameIndex} at ${new Date(timestamp).toISOString()}`);
       } else {
         // Same frame - increment click count
@@ -146,26 +165,92 @@ class BehaviorTracker {
         frameExitTimestamp: timestamp,
         correctionTimeMs,
         clickCount: this.currentFrameClickCount,
+        loraTrainingTimeMs: this.currentFrameLoraTrainingTime || undefined,
       };
 
       this.sessionData.frameCorrectionTimes.push(frameCorrectionTime);
 
-      // Update all correction clicks for this frame with the correction time
+      // Update all correction clicks for this frame with the correction time and LoRA time
       this.sessionData.clicks.forEach(click => {
         if (click.isCorrection && click.frameIndex === this.currentFrameIndex) {
           click.correctionTimeMs = correctionTimeMs;
+          if (this.currentFrameLoraTrainingTime) {
+            click.loraTrainingTimeMs = this.currentFrameLoraTrainingTime;
+          }
         }
       });
 
+      const loraInfo = this.currentFrameLoraTrainingTime 
+        ? `, LoRA training: ${this.currentFrameLoraTrainingTime.toFixed(0)}ms`
+        : '';
       console.log(
         `[BehaviorTracker] Frame ${this.currentFrameIndex} correction completed:`,
-        `${correctionTimeMs}ms with ${this.currentFrameClickCount} click(s)`
+        `${correctionTimeMs}ms with ${this.currentFrameClickCount} click(s)${loraInfo}`
       );
 
       // Reset for next frame
       this.currentFrameFirstClickTimestamp = null;
       this.currentFrameIndex = null;
       this.currentFrameClickCount = 0;
+      this.currentFrameLoraTrainingTime = null;
+    }
+  }
+
+  logLoraTrainingTime(frameIndex: number, trainingTimeMs: number): void {
+    console.log(`[BehaviorTracker] logLoraTrainingTime called with frameIndex=${frameIndex}, trainingTimeMs=${trainingTimeMs}`);
+    
+    if (!this.sessionData) {
+      console.log(`[BehaviorTracker] ERROR: No session data, cannot store LoRA training time`);
+      return;
+    }
+
+    const timestamp = Date.now();
+
+    // Store the training time by frame index for later retrieval
+    this.loraTrainingTimesByFrame.set(frameIndex, trainingTimeMs);
+    console.log(`[BehaviorTracker] Stored LoRA training time for frame ${frameIndex}: ${trainingTimeMs.toFixed(2)}ms`);
+    console.log(`[BehaviorTracker] Map now has ${this.loraTrainingTimesByFrame.size} entries:`, Array.from(this.loraTrainingTimesByFrame.entries()));
+    
+    // If this is for the current frame being corrected, also set it immediately
+    if (this.currentFrameIndex === frameIndex) {
+      this.currentFrameLoraTrainingTime = trainingTimeMs;
+      console.log(`[BehaviorTracker] Also set as current frame LoRA training time`);
+    } else {
+      console.log(`[BehaviorTracker] Stored for later use (current frame: ${this.currentFrameIndex}, training frame: ${frameIndex})`);
+      
+      // Check if we already recorded a correction time for this frame (without LoRA training time)
+      // If so, update it now that training has completed
+      const existingCorrectionIndex = this.sessionData.frameCorrectionTimes.findIndex(
+        fc => fc.frameIndex === frameIndex
+      );
+      
+      if (existingCorrectionIndex !== -1) {
+        const existingCorrection = this.sessionData.frameCorrectionTimes[existingCorrectionIndex];
+        
+        // Update the frame exit timestamp to be now (when training completed)
+        // and recalculate the correction time to include training duration
+        const updatedCorrectionTimeMs = timestamp - existingCorrection.firstClickTimestamp;
+        
+        this.sessionData.frameCorrectionTimes[existingCorrectionIndex] = {
+          ...existingCorrection,
+          frameExitTimestamp: timestamp,
+          correctionTimeMs: updatedCorrectionTimeMs,
+          loraTrainingTimeMs: trainingTimeMs,
+        };
+        
+        // Also update all correction clicks for this frame
+        this.sessionData.clicks.forEach(click => {
+          if (click.isCorrection && click.frameIndex === frameIndex) {
+            click.correctionTimeMs = updatedCorrectionTimeMs;
+            click.loraTrainingTimeMs = trainingTimeMs;
+          }
+        });
+        
+        console.log(
+          `[BehaviorTracker] Updated frame ${frameIndex} correction time to ${updatedCorrectionTimeMs}ms ` +
+          `(was ${existingCorrection.correctionTimeMs}ms) to include LoRA training completion`
+        );
+      }
     }
   }
 
@@ -188,6 +273,12 @@ class BehaviorTracker {
     if (!this.sessionData) {
       return JSON.stringify({error: 'No session data available'});
     }
+
+    // Debug: Check what's in the loraTrainingTimesByFrame map
+    console.log('[BehaviorTracker] exportData called');
+    console.log('[BehaviorTracker] loraTrainingTimesByFrame size:', this.loraTrainingTimesByFrame.size);
+    console.log('[BehaviorTracker] loraTrainingTimesByFrame contents:', Array.from(this.loraTrainingTimesByFrame.entries()));
+    console.log('[BehaviorTracker] frameCorrectionTimes:', this.sessionData.frameCorrectionTimes);
 
     // Calculate duration only if startTime has been set (frame tracking was enabled)
     let totalDuration = 0;
@@ -219,6 +310,16 @@ class BehaviorTracker {
       ? totalCorrectionTimeMs / correctedFrames.length
       : 0;
 
+    // Calculate LoRA training statistics
+    const framesWithLoraTraining = correctedFrames.filter(frame => frame.loraTrainingTimeMs);
+    const totalLoraTrainingTimeMs = framesWithLoraTraining.reduce(
+      (sum, frame) => sum + (frame.loraTrainingTimeMs || 0),
+      0
+    );
+    const avgLoraTrainingTimeMs = framesWithLoraTraining.length > 0
+      ? totalLoraTrainingTimeMs / framesWithLoraTraining.length
+      : 0;
+
     const summary = {
       sessionId: this.sessionData.sessionId,
       videoName: this.sessionData.videoName,
@@ -232,6 +333,11 @@ class BehaviorTracker {
       totalCorrectionTimeSeconds: Math.round(totalCorrectionTimeMs / 1000),
       avgCorrectionTimeMs: Math.round(avgCorrectionTimeMs),
       avgCorrectionTimeSeconds: (avgCorrectionTimeMs / 1000).toFixed(2),
+      framesWithLoraTraining: framesWithLoraTraining.length,
+      totalLoraTrainingTimeMs: Math.round(totalLoraTrainingTimeMs),
+      totalLoraTrainingTimeSeconds: Math.round(totalLoraTrainingTimeMs / 1000),
+      avgLoraTrainingTimeMs: Math.round(avgLoraTrainingTimeMs),
+      avgLoraTrainingTimeSeconds: (avgLoraTrainingTimeMs / 1000).toFixed(2),
       trackingEventsCount: this.sessionData.trackingEvents.length,
     };
 
@@ -254,11 +360,21 @@ class BehaviorTracker {
     console.log(`Total Corrections/Clicks: ${summary.totalCorrections}`);
     console.log(`Frames with Clicks: ${summary.framesWithClicks}`);
     
+    if (summary.framesWithLoraTraining > 0) {
+      console.log(`\n=== LoRA Training Statistics ===`);
+      console.log(`Frames with LoRA Training: ${summary.framesWithLoraTraining}`);
+      console.log(`Total LoRA Training Time: ${summary.totalLoraTrainingTimeSeconds}s (${summary.totalLoraTrainingTimeMs}ms)`);
+      console.log(`Average LoRA Training Time: ${summary.avgLoraTrainingTimeSeconds}s (${summary.avgLoraTrainingTimeMs}ms)`);
+    }
+    
     if (correctedFrames.length > 0) {
       console.log('\n=== Correction Times per Frame ===');
       correctedFrames.forEach(frame => {
+        const loraInfo = frame.loraTrainingTimeMs 
+          ? `, LoRA: ${(frame.loraTrainingTimeMs / 1000).toFixed(2)}s`
+          : '';
         console.log(
-          `Frame ${frame.frameIndex}: ${(frame.correctionTimeMs / 1000).toFixed(2)}s with ${frame.clickCount} click(s)`
+          `Frame ${frame.frameIndex}: ${(frame.correctionTimeMs / 1000).toFixed(2)}s with ${frame.clickCount} click(s)${loraInfo}`
         );
       });
     }
@@ -285,6 +401,8 @@ class BehaviorTracker {
     this.currentFrameFirstClickTimestamp = null;
     this.currentFrameIndex = null;
     this.currentFrameClickCount = 0;
+    this.currentFrameLoraTrainingTime = null;
+    this.loraTrainingTimesByFrame.clear();
   }
 }
 

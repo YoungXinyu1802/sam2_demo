@@ -201,7 +201,7 @@ export type StreamingStateUpdateResponse = Request<
 
 export type TrainingProgressResponse = Request<
   'trainingProgress',
-  {message: string}
+  {message: string; trainingTimeMs?: number; frameIndex?: number}
 >;
 
 export type MemoryInitializationStatusResponse = Request<

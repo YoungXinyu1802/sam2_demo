@@ -243,6 +243,7 @@ class GenerateLoraCandidatesResponse:
 class TrainLoRAResponse:
     success: bool
     message: str
+    training_time_ms: Optional[float] = None
 
 
 @dataclass_json

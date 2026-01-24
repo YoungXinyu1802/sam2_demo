@@ -992,7 +992,7 @@ export class SAM2Model extends Tracker {
               counts: rleData.counts,
             };
             trainingRequests.push(
-              this._sendLoRATrainingData(frameIndex, objectId, rleObject),
+              this._sendLoRATrainingData(frameIndex, objectId, rleObject).then(() => {}),
             );
             Logger.info(`Sent training data for object ${objectId} at frame ${frameIndex}`);
           }
@@ -1206,9 +1206,27 @@ export class SAM2Model extends Tracker {
         message: 'Training LoRA model...',
       });
       
+      let totalTrainingTimeMs = 0;
       for (const {frameIndex, objectId, mask} of framesToTrain) {
-        await this._sendLoRATrainingData(frameIndex, objectId, mask);
+        const trainingTimeMs = await this._sendLoRATrainingData(frameIndex, objectId, mask);
+        Logger.info(`[SAM2Model] Received training time: ${trainingTimeMs}ms for frame ${frameIndex}`);
+        if (trainingTimeMs) {
+          totalTrainingTimeMs += trainingTimeMs;
+          // Send training time event to main thread for logging
+          const eventData = {
+            message: `LoRA trained in ${trainingTimeMs.toFixed(0)}ms`,
+            trainingTimeMs: trainingTimeMs,
+            frameIndex: frameIndex,
+          };
+          Logger.info(`[SAM2Model] Sending trainingProgress event with data:`, eventData);
+          this._sendResponse<TrainingProgressResponse>('trainingProgress', eventData);
+        } else {
+          Logger.warn(`[SAM2Model] No training time received for frame ${frameIndex}`);
+        }
         Logger.info(`Trained LoRA for object ${objectId} at frame ${frameIndex} before propagation`);
+      }
+      if (totalTrainingTimeMs > 0) {
+        Logger.info(`Total LoRA training time: ${totalTrainingTimeMs.toFixed(2)}ms`);
       }
     }
   }
@@ -1217,11 +1235,11 @@ export class SAM2Model extends Tracker {
     frameIndex: number,
     objectId: number,
     mask: RLEObject,
-  ): Promise<void> {
+  ): Promise<number | null> {
     const sessionId = this._session.id;
     if (!sessionId) {
       Logger.warn('No session ID for LoRA training data');
-      return;
+      return null;
     }
 
     try {
@@ -1247,9 +1265,19 @@ export class SAM2Model extends Tracker {
       }
 
       const result = await response.json();
+      Logger.info('[LoRA Timing] Raw response from backend:', result);
+      const trainingTimeMs = result.training_time_ms;
+      Logger.info(`[LoRA Timing] Extracted training_time_ms: ${trainingTimeMs}`);
       Logger.info('LoRA training data sent:', result);
+      if (trainingTimeMs) {
+        Logger.info(`LoRA training completed in ${trainingTimeMs.toFixed(2)}ms`);
+      } else {
+        Logger.warn('[LoRA Timing] No training time received from backend!');
+      }
+      return trainingTimeMs || null;
     } catch (error) {
       Logger.error('Failed to send LoRA training data:', error);
+      return null;
     }
   }
 
