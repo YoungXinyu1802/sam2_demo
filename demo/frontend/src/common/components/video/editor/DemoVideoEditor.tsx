@@ -49,6 +49,7 @@ import {
   isInitializingMemoryAtom,
   isPlayingAtom,
   isVideoLoadingAtom,
+  litLoRAModeEnabledAtom,
   loraMaskCandidatesAtom,
   memoryInitializedAtom,
   pointsAtom,
@@ -128,6 +129,7 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
   const isVideoLoading = useAtomValue(isVideoLoadingAtom);
   const uploadingState = useAtomValue(uploadingStateAtom);
   const frameTrackingEnabled = useAtomValue(frameTrackingEnabledAtom);
+  const isLITLoRAModeEnabled = useAtomValue(litLoRAModeEnabledAtom);
 
   const [renderingError, setRenderingError] = useState<ErrorObject | null>(
     null,
@@ -240,8 +242,9 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
     function onVideoEndedAtFinalFrame(_event: VideoEndedAtFinalFrameEvent) {
       // Automatically export behavior data when video reaches the final frame
       console.log('[DemoVideoEditor] Video reached final frame, exporting behavior data');
+      console.log('[DemoVideoEditor] LIT_LoRA mode enabled:', isLITLoRAModeEnabled);
       behaviorTracker.endSession();
-      behaviorTracker.downloadData();
+      behaviorTracker.downloadData(undefined, isLITLoRAModeEnabled);
     }
 
     video?.addEventListener('videoEndedAtFinalFrame', onVideoEndedAtFinalFrame);

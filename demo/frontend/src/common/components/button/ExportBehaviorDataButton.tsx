@@ -15,17 +15,21 @@
  */
 import PrimaryCTAButton from '@/common/components/button/PrimaryCTAButton';
 import {behaviorTracker} from '@/common/utils/BehaviorTracker';
+import {litLoRAModeEnabledAtom} from '@/demo/atoms';
 import {Download} from '@carbon/icons-react';
+import {useAtomValue} from 'jotai';
 import {useCallback} from 'react';
 
 export default function ExportBehaviorDataButton() {
+  const isLITLoRAModeEnabled = useAtomValue(litLoRAModeEnabledAtom);
+
   const handleExport = useCallback(() => {
     // End the session timing
     behaviorTracker.endSession();
     
-    // Download the data
-    behaviorTracker.downloadData();
-  }, []);
+    // Download the data with LIT status
+    behaviorTracker.downloadData(undefined, isLITLoRAModeEnabled);
+  }, [isLITLoRAModeEnabled]);
 
   return (
     <PrimaryCTAButton

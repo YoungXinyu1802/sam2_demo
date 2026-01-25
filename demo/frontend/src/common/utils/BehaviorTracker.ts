@@ -316,7 +316,7 @@ class BehaviorTracker {
     console.log('[BehaviorTracker] After endSession - frameCorrectionTimes:', this.sessionData.frameCorrectionTimes.length);
   }
 
-  exportData(): string {
+  exportData(isLITEnabled?: boolean): string {
     if (!this.sessionData) {
       console.log('[BehaviorTracker] ❌ exportData called but no session data available');
       return JSON.stringify({error: 'No session data available'});
@@ -333,6 +333,7 @@ class BehaviorTracker {
     console.log('[BehaviorTracker] frameCorrectionTimes:', this.sessionData.frameCorrectionTimes.length);
     console.log('[BehaviorTracker] loraTrainingTimesByFrame size:', this.loraTrainingTimesByFrame.size);
     console.log('[BehaviorTracker] loraTrainingTimesByFrame contents:', Array.from(this.loraTrainingTimesByFrame.entries()));
+    console.log('[BehaviorTracker] LIT_LoRA enabled:', isLITEnabled);
 
     // Calculate duration only if startTime has been set (frame tracking was enabled)
     let totalDuration = 0;
@@ -377,6 +378,7 @@ class BehaviorTracker {
     const summary = {
       sessionId: this.sessionData.sessionId,
       videoName: this.sessionData.videoName,
+      litLoRAEnabled: isLITEnabled ?? false,
       totalAnnotationTimeMs: totalDuration,
       totalAnnotationTimeSeconds: Math.round(totalDuration / 1000),
       totalClicks: this.sessionData.clicks.length,
@@ -407,6 +409,7 @@ class BehaviorTracker {
     console.log('\n=== Annotation Session Summary ===');
     console.log(`Session ID: ${summary.sessionId}`);
     console.log(`Video: ${summary.videoName}`);
+    console.log(`LIT_LoRA Enabled: ${summary.litLoRAEnabled}`);
     console.log(`\nTotal Annotation Time: ${summary.totalAnnotationTimeSeconds}s (${summary.totalAnnotationTimeMs}ms)`);
     console.log(`Total Correction Time: ${summary.totalCorrectionTimeSeconds}s (${summary.totalCorrectionTimeMs}ms)`);
     console.log(`Average Correction Time per Frame: ${summary.avgCorrectionTimeSeconds}s (${summary.avgCorrectionTimeMs}ms)`);
@@ -437,7 +440,7 @@ class BehaviorTracker {
     return JSON.stringify(exportData, null, 2);
   }
 
-  downloadData(filename?: string): void {
+  downloadData(filename?: string, isLITEnabled?: boolean): void {
     console.log('[BehaviorTracker] 💾 downloadData called');
     console.log('[BehaviorTracker] sessionData exists?', this.sessionData !== null);
     if (this.sessionData) {
@@ -451,7 +454,7 @@ class BehaviorTracker {
       }));
     }
     
-    const data = this.exportData();
+    const data = this.exportData(isLITEnabled);
     
     console.log('[BehaviorTracker] About to create blob with data length:', data.length);
     console.log('[BehaviorTracker] First 500 chars of export:', data.substring(0, 500));
@@ -460,7 +463,37 @@ class BehaviorTracker {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename || `behavior-tracking-${Date.now()}.json`;
+    
+    // Generate filename based on video name and LIT status if not provided
+    if (!filename && this.sessionData) {
+      let videoName = this.sessionData.videoName || 'unknown';
+      // Extract filename from path if it's a full path
+      if (videoName.includes('/')) {
+        videoName = videoName.split('/').pop() || videoName;
+      }
+      // Remove .mp4 extension if present
+      videoName = videoName.replace(/\.mp4$/i, '');
+      // Remove gallery_ prefix if present
+      videoName = videoName.replace(/^gallery_/i, '');
+      const mode = isLITEnabled ? 'LIT' : 'baseline';
+      
+      // Get current date and time in EST
+      const now = new Date();
+      const estTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      const month = String(estTime.getMonth() + 1).padStart(2, '0');
+      const day = String(estTime.getDate()).padStart(2, '0');
+      const hours = String(estTime.getHours()).padStart(2, '0');
+      const minutes = String(estTime.getMinutes()).padStart(2, '0');
+      const seconds = String(estTime.getSeconds()).padStart(2, '0');
+      const timestamp = `${month}-${day}_${hours}-${minutes}-${seconds}`;
+      
+      filename = `${videoName}_${mode}_${timestamp}.json`;
+    } else if (!filename) {
+      filename = `behavior-tracking-${Date.now()}.json`;
+    }
+    
+    a.download = filename;
+    console.log('[BehaviorTracker] Download filename:', filename);
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
