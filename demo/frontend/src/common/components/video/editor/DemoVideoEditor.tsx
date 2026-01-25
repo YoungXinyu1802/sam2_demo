@@ -62,7 +62,7 @@ import {
 import useSettingsContext from '@/settings/useSettingsContext';
 import {color, spacing} from '@/theme/tokens.stylex';
 import stylex from '@stylexjs/stylex';
-import {useAtom, useAtomValue, useSetAtom} from 'jotai';
+import {useAtom, useAtomValue, useSetAtom, useStore} from 'jotai';
 import {useEffect, useState} from 'react';
 import type {ErrorObject} from 'serialize-error';
 
@@ -106,6 +106,7 @@ type Props = {
 export default function DemoVideoEditor({video: inputVideo}: Props) {
   const {settings} = useSettingsContext();
   const video = useVideo();
+  const store = useStore();
 
   const [isSessionStartFailed, setIsSessionStartFailed] =
     useState<boolean>(false);
@@ -129,7 +130,6 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
   const isVideoLoading = useAtomValue(isVideoLoadingAtom);
   const uploadingState = useAtomValue(uploadingStateAtom);
   const frameTrackingEnabled = useAtomValue(frameTrackingEnabledAtom);
-  const isLITLoRAModeEnabled = useAtomValue(litLoRAModeEnabledAtom);
 
   const [renderingError, setRenderingError] = useState<ErrorObject | null>(
     null,
@@ -241,10 +241,14 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
 
     function onVideoEndedAtFinalFrame(_event: VideoEndedAtFinalFrameEvent) {
       // Automatically export behavior data when video reaches the final frame
+      // Read the current LIT status directly from the store at export time
+      // to avoid any closure or timing issues
+      const currentLITLoRAModeEnabled = store.get(litLoRAModeEnabledAtom);
+      
       console.log('[DemoVideoEditor] Video reached final frame, exporting behavior data');
-      console.log('[DemoVideoEditor] LIT_LoRA mode enabled:', isLITLoRAModeEnabled);
+      console.log('[DemoVideoEditor] LIT_LoRA mode enabled:', currentLITLoRAModeEnabled);
       behaviorTracker.endSession();
-      behaviorTracker.downloadData(undefined, isLITLoRAModeEnabled);
+      behaviorTracker.downloadData(undefined, currentLITLoRAModeEnabled);
     }
 
     video?.addEventListener('videoEndedAtFinalFrame', onVideoEndedAtFinalFrame);
@@ -277,6 +281,7 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
     video,
     settings.inferenceAPIEndpoint,
     settings.videoAPIEndpoint,
+    store,
   ]);
 
   async function handleOptimisticPointUpdate(newPoints: SegmentationPoint[]) {
