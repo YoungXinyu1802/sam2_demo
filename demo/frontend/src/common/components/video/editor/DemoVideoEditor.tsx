@@ -302,9 +302,17 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
     }
     enqueueMessage('pointClick');
     
-    // Log clicks for behavior tracking
+    // Log only the newly added point for behavior tracking
     const objectId = activeTrackletId ?? 0;
-    newPoints.forEach(point => {
+    // Only log new points that weren't in the previous points array
+    // Compare by value, not by reference (since points are arrays)
+    const previousPoints = points;
+    const newlyAddedPoints = newPoints.filter((p: SegmentationPoint) => 
+      !previousPoints.some((prev: SegmentationPoint) => 
+        prev[0] === p[0] && prev[1] === p[1] && prev[2] === p[2]
+      )
+    );
+    newlyAddedPoints.forEach(point => {
       behaviorTracker.logClick(
         frameIndex,
         objectId,
@@ -315,7 +323,8 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
     });
     
     // Add frame to corrected frames set if frame tracking is enabled
-    if (frameTrackingEnabled && newPoints.length > 0) {
+    // Skip frame 0 as it's typically the initial mask frame, not a correction
+    if (frameTrackingEnabled && newPoints.length > 0 && frameIndex !== 0) {
       setCorrectedFrames((prev: Set<number>) => {
         const newSet = new Set(prev);
         newSet.add(frameIndex);
@@ -342,7 +351,7 @@ export default function DemoVideoEditor({video: inputVideo}: Props) {
     ) {
       return;
     }
-    handleOptimisticPointUpdate(points.filter(p => p !== point));
+    handleOptimisticPointUpdate(points.filter((p: SegmentationPoint) => p !== point));
   }
 
   // The interaction layer handles clicks onto the video canvas. It is used
